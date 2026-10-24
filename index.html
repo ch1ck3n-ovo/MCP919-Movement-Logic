@@ -1,0 +1,2745 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>MCP919-Movement-Logic</title>
+<style>
+    body {
+        background-color: #1e1e1e;
+        color: #d4d4d4;
+        font-family: Consolas, "Courier New", monospace;
+        padding: 20px;
+        line-height: 1.5;
+    }
+    .code-container {
+        white-space: pre;
+        tab-size: 4;
+    }
+    /* 強制設定為 block，確保收折行為乾淨俐落 */
+    details, summary, .comment {
+        display: block;
+        margin: 0;
+        padding: 0;
+    }
+    summary {
+        cursor: pointer;
+        color: #6aab73;
+        user-select: none;
+        font-weight: bold;
+    }
+    summary:hover {
+        color: #9cdcfe;
+    }
+    /* 隱藏預設的折疊箭頭符號 */
+    details > summary::marker,
+    details > summary::-webkit-details-marker {
+        display: none;
+    }
+	.comment {
+        color: #808080;
+        font-weight: bold;
+    }
+    
+    /* 核心：進階 IDE 風格的 [ 型縮排結構線 */
+    details {
+        position: relative;
+    }
+    details[open]::before {
+        content: "";
+        position: absolute;
+        /* 將線條定位在縮排的前方 (1 Tab = 4ch) */
+        left: calc(var(--tabs) * 4ch - 2ch);
+        /* 頂部橫線：對齊第一行註解的垂直置中位置 (行高 1.5 的一半 = 0.75em) */
+        top: 2.25em;
+        /* 底部橫線：由 HTML 內的 --bottom 變數控制，精準對齊 End 註解 */
+        bottom: var(--bottom);
+        /* 橫線向右延伸的長度 */
+        width: calc(0.6ch + var(--offset, 0ch));
+        /* 畫出左、上、下邊框，形成類似 [ 的形狀 */
+        border-left: 1px solid #505050;
+        border-top: 1px solid #505050;
+        border-bottom: 1px solid #505050;
+        pointer-events: none;
+        transition: border-color 0.2s;
+    }
+    /* 滑鼠懸停時結構線加亮 */
+    details[open]:hover::before {
+        border-color: #888888;
+    }
+</style>
+</head>
+<body>
+<div class="code-container"><details open style="--tabs: 0.05; --bottom: 0.75em;"><summary>@from net.minecraft.client.entity.EntityPlayerSP.java;<br>this.onUpdate();</summary>public void onUpdate() {
+	if (this.worldObj.isBlockLoaded(new BlockPos(this.posX, 0.0D, this.posZ))) {
+<details open style="--tabs: 0.75; --offset: 6.0ch; --bottom: 0.75em;"><summary>		@from net.minecraft.entity.player.EntityPlayer.java;<br>		super.onUpdate();</summary>		this.noClip = this.isSpectator();
+
+		if (this.isSpectator()) {
+			this.onGround = false;
+		}
+
+		if (this.itemInUse != null) {
+			ItemStack itemstack = this.inventory.getCurrentItem();
+
+			if (itemstack == this.itemInUse) {
+				if (this.itemInUseCount <= 25 && this.itemInUseCount % 4 == 0) {
+					this.updateItemUse(itemstack, 5);
+				}
+
+				if (--this.itemInUseCount == 0 && !this.worldObj.isRemote) {
+					this.onItemUseFinish();
+				}
+			} else {
+				this.clearItemInUse();
+			}
+		}
+
+		if (this.xpCooldown > 0) {
+			--this.xpCooldown;
+		}
+
+		if (this.isPlayerSleeping()) {
+			++this.sleepTimer;
+
+			if (this.sleepTimer > 100) {
+				this.sleepTimer = 100;
+			}
+
+			if (!this.worldObj.isRemote) {
+				if (!this.isInBed()) {
+					this.wakeUpPlayer(true, true, false);
+				} else if (this.worldObj.isDaytime()) {
+					this.wakeUpPlayer(false, true, true);
+				}
+			}
+		} else if (this.sleepTimer > 0) {
+			++this.sleepTimer;
+
+			if (this.sleepTimer >= 110) {
+				this.sleepTimer = 0;
+			}
+		}
+
+<details open style="--tabs: 1.0; --offset: 4.8ch; --bottom: 0.75em;"><summary>		@from net.minecraft.entity.EntityLivingBase.java;<br>		super.onUpdate();</summary><details open style="--tabs: 3; --offset: 0ch; --bottom: 0.75em;"><summary>			@from net.minecraft.entity.Entity.java;<br>			super.onUpdate();</summary><details open style="--tabs: 3.75; --offset: 1.2ch; --bottom: 0.75em;"><summary>				@from net.minecraft.entity.Entity.java;<br>				this.onEntityUpdate();</summary>				this.worldObj.theProfiler.startSection("entityBaseTick");
+
+				if (this.ridingEntity != null && this.ridingEntity.isDead) {
+					this.ridingEntity = null;
+				}
+
+				this.prevDistanceWalkedModified = this.distanceWalkedModified;
+				this.prevPosX = this.posX;
+				this.prevPosY = this.posY;
+				this.prevPosZ = this.posZ;
+				this.prevRotationPitch = this.rotationPitch;
+				this.prevRotationYaw = this.rotationYaw;
+
+				if (!this.worldObj.isRemote && this.worldObj instanceof WorldServer) {
+					this.worldObj.theProfiler.startSection("portal");
+					MinecraftServer minecraftserver = ((WorldServer)this.worldObj).getMinecraftServer();
+					int i = this.getMaxInPortalTime();
+
+					if (this.inPortal) {
+						if (minecraftserver.getAllowNether()) {
+							if (this.ridingEntity == null && this.portalCounter++ >= i) {
+								this.portalCounter = i;
+								this.timeUntilPortal = this.getPortalCooldown();
+								int j;
+
+								if (this.worldObj.provider.getDimensionId() == -1) {
+									j = 0;
+								} else {
+									j = -1;
+								}
+
+								this.travelToDimension(j);
+							}
+
+							this.inPortal = false;
+						}
+					} else {
+						if (this.portalCounter > 0) {
+							this.portalCounter -= 4;
+						}
+
+						if (this.portalCounter < 0) {
+							this.portalCounter = 0;
+						}
+					}
+
+					if (this.timeUntilPortal > 0) {
+						--this.timeUntilPortal;
+					}
+
+					this.worldObj.theProfiler.endSection();
+				}
+
+				this.spawnRunningParticles();
+<details open style="--tabs: 4; --offset: 0ch; --bottom: 0.75em;"><summary>				@from net.minecraft.entity.Entity.java;<br>				this.handleWaterMovement();</summary>				if (this.worldObj.handleMaterialAcceleration(this.getEntityBoundingBox().expand(0.0D, -0.4000000059604645D, 0.0D).contract(0.001D, 0.001D, 0.001D), Material.water, this)) {
+					if (!this.inWater && !this.firstUpdate) {
+						this.resetHeight();
+					}
+
+					this.fallDistance = 0.0F;
+					this.inWater = true;
+					this.fire = 0;
+				} else {
+					this.inWater = false;
+				}
+<span class="comment">				// @from net.minecraft.entity.Entity.java;<br>				// this.handleWaterMovement();</span></details>
+				if (this.worldObj.isRemote) {
+					this.fire = 0;
+				} else if (this.fire > 0) {
+					if (this.isImmuneToFire) {
+						this.fire -= 4;
+
+						if (this.fire < 0) {
+							this.fire = 0;
+						}
+					} else {
+						if (this.fire % 20 == 0) {
+							this.attackEntityFrom(DamageSource.onFire, 1.0F);
+						}
+
+						--this.fire;
+					}
+				}
+
+				if (this.isInLava()) {
+					this.setOnFireFromLava();
+					this.fallDistance *= 0.5F;
+				}
+
+				if (this.posY < -64.0D) {
+					this.kill();
+				}
+
+				if (!this.worldObj.isRemote) {
+					this.setFlag(0, this.fire > 0);
+				}
+
+				this.firstUpdate = false;
+				this.worldObj.theProfiler.endSection();
+<span class="comment">				// @from net.minecraft.entity.Entity.java;<br>				// this.onEntityUpdate();</span></details><span class="comment">			// @from net.minecraft.entity.Entity.java;<br>			// super.onUpdate();</span></details>
+		if (!this.worldObj.isRemote) {
+			int i = this.getArrowCountInEntity();
+
+			if (i > 0) {
+				if (this.arrowHitTimer <= 0) {
+					this.arrowHitTimer = 20 * (30 - i);
+				}
+
+				--this.arrowHitTimer;
+
+				if (this.arrowHitTimer <= 0) {
+					this.setArrowCountInEntity(i - 1);
+				}
+			}
+
+			for (int j = 0; j < 5; ++j) {
+				ItemStack itemstack = this.previousEquipment[j];
+				ItemStack itemstack1 = this.getEquipmentInSlot(j);
+
+				if (!ItemStack.areItemStacksEqual(itemstack1, itemstack)) {
+					((WorldServer)this.worldObj).getEntityTracker().sendToAllTrackingEntity(this, new S04PacketEntityEquipment(this.getEntityId(), j, itemstack1));
+
+					if (itemstack != null) {
+						this.attributeMap.removeAttributeModifiers(itemstack.getAttributeModifiers());
+					}
+
+					if (itemstack1 != null) {
+						this.attributeMap.applyAttributeModifiers(itemstack1.getAttributeModifiers());
+					}
+
+					this.previousEquipment[j] = itemstack1 == null ? null : itemstack1.copy();
+				}
+			}
+
+			if (this.ticksExisted % 20 == 0) {
+				this.getCombatTracker().reset();
+			}
+		}
+<details open style="--tabs: 1.25; --offset: 3.6ch; --bottom: 0.75em;"><summary>		@from net.minecraft.client.entity.EntityPlayerSP.java;<br>		this.onLivingUpdate();</summary>        if (this.sprintingTicksLeft > 0) {
+            --this.sprintingTicksLeft;
+
+            if (this.sprintingTicksLeft == 0) {
+                this.setSprinting(false);
+            }
+        }
+
+        if (this.sprintToggleTimer > 0) {
+            --this.sprintToggleTimer;
+        }
+
+        this.prevTimeInPortal = this.timeInPortal;
+
+        if (this.inPortal) {
+            if (this.mc.currentScreen != null && !this.mc.currentScreen.doesGuiPauseGame()) {
+                this.mc.displayGuiScreen((GuiScreen)null);
+            }
+
+            if (this.timeInPortal == 0.0F) {
+                this.mc.getSoundHandler().playSound(PositionedSoundRecord.create(new ResourceLocation("portal.trigger"), this.rand.nextFloat() * 0.4F + 0.8F));
+            }
+
+            this.timeInPortal += 0.0125F;
+
+            if (this.timeInPortal >= 1.0F) {
+                this.timeInPortal = 1.0F;
+            }
+
+            this.inPortal = false;
+        } else if (this.isPotionActive(Potion.confusion) && this.getActivePotionEffect(Potion.confusion).getDuration() > 60) {
+            this.timeInPortal += 0.006666667F;
+
+            if (this.timeInPortal > 1.0F) {
+                this.timeInPortal = 1.0F;
+            }
+        } else {
+            if (this.timeInPortal > 0.0F) {
+                this.timeInPortal -= 0.05F;
+            }
+
+            if (this.timeInPortal < 0.0F) {
+                this.timeInPortal = 0.0F;
+            }
+        }
+
+        if (this.timeUntilPortal > 0) {
+            --this.timeUntilPortal;
+        }
+
+        boolean flag = this.movementInput.jump;
+        boolean flag1 = this.movementInput.sneak;
+        float f = 0.8F;
+        boolean flag2 = this.movementInput.moveForward >= f;
+        this.movementInput.updatePlayerMoveState();
+
+        if (this.isUsingItem() && !this.isRiding()) {
+            this.movementInput.moveStrafe *= 0.2F;
+            this.movementInput.moveForward *= 0.2F;
+            this.sprintToggleTimer = 0;
+        }
+
+        this.pushOutOfBlocks(this.posX - (double)this.width * 0.35D, this.getEntityBoundingBox().minY + 0.5D, this.posZ + (double)this.width * 0.35D);
+        this.pushOutOfBlocks(this.posX - (double)this.width * 0.35D, this.getEntityBoundingBox().minY + 0.5D, this.posZ - (double)this.width * 0.35D);
+        this.pushOutOfBlocks(this.posX + (double)this.width * 0.35D, this.getEntityBoundingBox().minY + 0.5D, this.posZ - (double)this.width * 0.35D);
+        this.pushOutOfBlocks(this.posX + (double)this.width * 0.35D, this.getEntityBoundingBox().minY + 0.5D, this.posZ + (double)this.width * 0.35D);
+        boolean flag3 = (float)this.getFoodStats().getFoodLevel() > 6.0F || this.capabilities.allowFlying;
+
+        if (this.onGround && !flag1 && !flag2 && this.movementInput.moveForward >= f && !this.isSprinting() && flag3 && !this.isUsingItem() && !this.isPotionActive(Potion.blindness)) {
+            if (this.sprintToggleTimer <= 0 && !this.mc.gameSettings.keyBindSprint.isKeyDown()) {
+                this.sprintToggleTimer = 7;
+            } else {
+                this.setSprinting(true);
+            }
+        }
+
+        if (!this.isSprinting() && this.movementInput.moveForward >= f && flag3 && !this.isUsingItem() && !this.isPotionActive(Potion.blindness) && this.mc.gameSettings.keyBindSprint.isKeyDown()) {
+            this.setSprinting(true);
+        }
+
+        if (this.isSprinting() && (this.movementInput.moveForward < f || this.isCollidedHorizontally || !flag3)) {
+            this.setSprinting(false);
+        }
+
+        if (this.capabilities.allowFlying) {
+            if (this.mc.playerController.isSpectatorMode()) {
+                if (!this.capabilities.isFlying) {
+                    this.capabilities.isFlying = true;
+                    this.sendPlayerAbilities();
+                }
+            } else if (!flag && this.movementInput.jump) {
+                if (this.flyToggleTimer == 0) {
+                    this.flyToggleTimer = 7;
+                } else {
+                    this.capabilities.isFlying = !this.capabilities.isFlying;
+                    this.sendPlayerAbilities();
+                    this.flyToggleTimer = 0;
+                }
+            }
+        }
+
+        if (this.capabilities.isFlying && this.isCurrentViewEntity()) {
+            if (this.movementInput.sneak) {
+                this.motionY -= (double)(this.capabilities.getFlySpeed() * 3.0F);
+            }
+
+            if (this.movementInput.jump) {
+                this.motionY += (double)(this.capabilities.getFlySpeed() * 3.0F);
+            }
+        }
+
+        if (this.isRidingHorse()) {
+            if (this.horseJumpPowerCounter < 0) {
+                ++this.horseJumpPowerCounter;
+
+                if (this.horseJumpPowerCounter == 0) {
+                    this.horseJumpPower = 0.0F;
+                }
+            }
+
+            if (flag && !this.movementInput.jump) {
+                this.horseJumpPowerCounter = -10;
+                this.sendHorseJump();
+            } else if (!flag && this.movementInput.jump) {
+                this.horseJumpPowerCounter = 0;
+                this.horseJumpPower = 0.0F;
+            } else if (flag) {
+                ++this.horseJumpPowerCounter;
+
+                if (this.horseJumpPowerCounter < 10) {
+                    this.horseJumpPower = (float)this.horseJumpPowerCounter * 0.1F;
+                } else {
+                    this.horseJumpPower = 0.8F + 2.0F / (float)(this.horseJumpPowerCounter - 9) * 0.1F;
+                }
+            }
+        } else {
+            this.horseJumpPower = 0.0F;
+        }
+
+<details open style="--tabs: 1.5; --offset: 2.4ch; --bottom: 0.75em;"><summary>		@from net.minecraft.entity.player.EntityPlayer.java;<br>		super.onLivingUpdate();</summary> 		if (this.flyToggleTimer > 0) {
+            --this.flyToggleTimer;
+        }
+
+        if (this.worldObj.getDifficulty() == EnumDifficulty.PEACEFUL && this.worldObj.getGameRules().getBoolean("naturalRegeneration")) {
+            if (this.getHealth() < this.getMaxHealth() && this.ticksExisted % 20 == 0) {
+                this.heal(1.0F);
+            }
+
+            if (this.foodStats.needFood() && this.ticksExisted % 10 == 0) {
+                this.foodStats.setFoodLevel(this.foodStats.getFoodLevel() + 1);
+            }
+        }
+
+        this.inventory.decrementAnimations();
+        this.prevCameraYaw = this.cameraYaw;
+<details open style="--tabs: 1.75; --offset: 1.2ch; --bottom: 0.75em;"><summary>		@from net.minecraft.entity.EntityLivingBase.java;<br>		super.onLivingUpdate();</summary>		if (this.jumpTicks > 0) {
+            --this.jumpTicks;
+        }
+
+        if (this.newPosRotationIncrements > 0) {
+            double d0 = this.posX + (this.newPosX - this.posX) / (double)this.newPosRotationIncrements;
+            double d1 = this.posY + (this.newPosY - this.posY) / (double)this.newPosRotationIncrements;
+            double d2 = this.posZ + (this.newPosZ - this.posZ) / (double)this.newPosRotationIncrements;
+            double d3 = MathHelper.wrapAngleTo180_double(this.newRotationYaw - (double)this.rotationYaw);
+            this.rotationYaw = (float)((double)this.rotationYaw + d3 / (double)this.newPosRotationIncrements);
+            this.rotationPitch = (float)((double)this.rotationPitch + (this.newRotationPitch - (double)this.rotationPitch) / (double)this.newPosRotationIncrements);
+            --this.newPosRotationIncrements;
+            this.setPosition(d0, d1, d2);
+            this.setRotation(this.rotationYaw, this.rotationPitch);
+        } else if (!this.isServerWorld()) {
+            this.motionX *= 0.98D;
+            this.motionY *= 0.98D;
+            this.motionZ *= 0.98D;
+        }
+
+        if (Math.abs(this.motionX) < 0.005D) {
+            this.motionX = 0.0D;
+        }
+
+        if (Math.abs(this.motionY) < 0.005D) {
+            this.motionY = 0.0D;
+        }
+
+        if (Math.abs(this.motionZ) < 0.005D) {
+            this.motionZ = 0.0D;
+        }
+
+        this.worldObj.theProfiler.startSection("ai");
+
+        if (this.isMovementBlocked()) {
+            this.isJumping = false;
+            this.moveStrafing = 0.0F;
+            this.moveForward = 0.0F;
+            this.randomYawVelocity = 0.0F;
+        } else if (this.isServerWorld()) {
+            this.worldObj.theProfiler.startSection("newAi");
+            this.updateEntityActionState();
+            this.worldObj.theProfiler.endSection();
+        }
+
+        this.worldObj.theProfiler.endSection();
+        this.worldObj.theProfiler.startSection("jump");
+
+        if (this.isJumping) {
+            if (this.isInWater()) {
+                this.updateAITick();<span class="comment">				// this.motionY += 0.03999999910593033D;</span>            } else if (this.isInLava()) {
+                this.handleJumpLava();<span class="comment">				// this.motionY += 0.03999999910593033D;</span>            } else if (this.onGround && this.jumpTicks == 0) {
+<details open style="--tabs: 3.75; --offset: 1.2ch; --bottom: 0.75em;"><summary>				@from net.minecraft.entity.player.EntityPlayer.java; <br>				this.jump();</summary><details open style="--tabs: 4; --offset: 0ch; --bottom: 0.75em;"><summary>				@from net.minecraft.entity.EntityLivingBase.java; <br>				super.jump();</summary>				this.motionY = (double)this.getJumpUpwardsMotion();<span class="comment">				// return 0.42F;</span>
+				if (this.isPotionActive(Potion.jump)) {
+					this.motionY += (double)((float)(this.getActivePotionEffect(Potion.jump).getAmplifier() + 1) * 0.1F);
+				}
+
+				if (this.isSprinting()) {
+					float f = this.rotationYaw * 0.017453292F;
+					this.motionX -= (double)(MathHelper.sin(f) * 0.2F);
+					this.motionZ += (double)(MathHelper.cos(f) * 0.2F);
+				}
+
+				this.isAirBorne = true;
+<span class="comment">				// @from net.minecraft.entity.EntityLivingBase.java;<br>				// super.jump();</span></details>				this.triggerAchievement(StatList.jumpStat);
+
+				if (this.isSprinting()) {
+					this.addExhaustion(0.8F);
+				} else {
+					this.addExhaustion(0.2F);
+				}
+<span class="comment">				// @from net.minecraft.entity.player.EntityPlayer.java;<br>				// this.jump();</span></details>                this.jumpTicks = 10;
+            }
+        } else {
+            this.jumpTicks = 0;
+        }
+
+        this.worldObj.theProfiler.endSection();
+        this.worldObj.theProfiler.startSection("travel");
+        this.moveStrafing *= 0.98F;
+        this.moveForward *= 0.98F;
+        this.randomYawVelocity *= 0.9F;
+<details open style="--tabs: 2; --offset: 0ch; --bottom: 0.75em;"><summary>		@from net.minecraft.entity.player.EntityPlayer.java; @params float strafe, float forward<br>        this.moveEntityWithHeading(this.moveStrafing, this.moveForward);</summary>
+ 		double d0 = this.posX;
+        double d1 = this.posY;
+        double d2 = this.posZ;
+
+        if (this.capabilities.isFlying && this.ridingEntity == null) {
+            double d3 = this.motionY;
+            float f = this.jumpMovementFactor;
+            this.jumpMovementFactor = this.capabilities.getFlySpeed() * (float)(this.isSprinting() ? 2 : 1);
+<details open style="--tabs: 3; --offset: 0ch; --bottom: 0.75em;"><summary>			@from net.minecraft.entity.EntityLivingBase.java; @params float strafe, float forward<br>        	super.moveEntityWithHeading(this.moveStrafing, this.moveForward);</summary>			if (this.isServerWorld()) {
+				if (!this.isInWater() || this instanceof EntityPlayer && ((EntityPlayer)this).capabilities.isFlying) {
+					if (!this.isInLava() || this instanceof EntityPlayer && ((EntityPlayer)this).capabilities.isFlying) {
+						float f4 = 0.91F;
+
+						if (this.onGround) {
+							f4 = this.worldObj.getBlockState(new BlockPos(MathHelper.floor_double(this.posX), MathHelper.floor_double(this.getEntityBoundingBox().minY) - 1, MathHelper.floor_double(this.posZ))).getBlock().slipperiness * 0.91F;
+						}
+
+						float f = 0.16277136F / (f4 * f4 * f4);
+						float f5;
+
+						if (this.onGround) {
+							f5 = this.getAIMoveSpeed() * f;
+						} else {
+							f5 = this.jumpMovementFactor;
+						}
+						
+<details open style="--tabs: 6; --offset: 0ch; --bottom: 0.75em;"><summary>						@from net.minecraft.entity.Entity.java; @params float strafe, float forward, float friction<br>						this.moveFlying(strafe, forward, f5);</summary>						float f = strafe * strafe + forward * forward;
+
+						if (f >= 1.0E-4F) {
+							f = MathHelper.sqrt_float(f);
+
+							if (f < 1.0F) {
+								f = 1.0F;
+							}
+
+							f = friction / f;
+							strafe = strafe * f;
+							forward = forward * f;
+							float f1 = MathHelper.sin(this.rotationYaw * (float)Math.PI / 180.0F);
+							float f2 = MathHelper.cos(this.rotationYaw * (float)Math.PI / 180.0F);
+							this.motionX += (double)(strafe * f2 - forward * f1);
+							this.motionZ += (double)(forward * f2 + strafe * f1);
+						}
+<span class="comment">						// @from net.minecraft.entity.Entity.java;<br>						// this.moveFlying(strafe, forward, f5);</span></details>                    	f4 = 0.91F;
+
+						if (this.onGround) {
+							f4 = this.worldObj.getBlockState(new BlockPos(MathHelper.floor_double(this.posX), MathHelper.floor_double(this.getEntityBoundingBox().minY) - 1, MathHelper.floor_double(this.posZ))).getBlock().slipperiness * 0.91F;
+						}
+
+						if (this.isOnLadder()) {
+							float f6 = 0.15F;
+							this.motionX = MathHelper.clamp_double(this.motionX, (double)(-f6), (double)f6);
+							this.motionZ = MathHelper.clamp_double(this.motionZ, (double)(-f6), (double)f6);
+							this.fallDistance = 0.0F;
+
+							if (this.motionY < -0.15D) {
+								this.motionY = -0.15D;
+							}
+
+							boolean flag = this.isSneaking() && this instanceof EntityPlayer;
+
+							if (flag && this.motionY < 0.0D) {
+								this.motionY = 0.0D;
+							}
+						}
+						
+<details open style="--tabs: 6; --offset: 0ch; --bottom: 0.75em;"><summary>						@from net.minecraft.entity.Entity.java; @params double x, double y, double z<br>						this.moveEntity(this.motionX, this.motionY, this.motionZ);</summary>						if (this.noClip) {
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, y, z));
+							this.resetPositionToBB();
+						} else {
+							this.worldObj.theProfiler.startSection("move");
+							double d0 = this.posX;
+							double d1 = this.posY;
+							double d2 = this.posZ;
+
+							if (this.isInWeb) {
+								this.isInWeb = false;
+								x *= 0.25D;
+								y *= 0.05000000074505806D;
+								z *= 0.25D;
+								this.motionX = 0.0D;
+								this.motionY = 0.0D;
+								this.motionZ = 0.0D;
+							}
+
+							double d3 = x;
+							double d4 = y;
+							double d5 = z;
+							boolean flag = this.onGround && this.isSneaking() && this instanceof EntityPlayer;
+
+							if (flag) {
+								double d6;
+
+								for (d6 = 0.05D; x != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, 0.0D)).isEmpty(); d3 = x) {
+									if (x < d6 && x >= -d6) {
+										x = 0.0D;
+									} else if (x > 0.0D) {
+										x -= d6;
+									} else {
+										x += d6;
+									}
+								}
+
+								for (; z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(0.0D, -1.0D, z)).isEmpty(); d5 = z) {
+									if (z < d6 && z >= -d6) {
+										z = 0.0D;
+									} else if (z > 0.0D) {
+										z -= d6;
+									} else {
+										z += d6;
+									}
+								}
+
+								for (; x != 0.0D && z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, z)).isEmpty(); d5 = z) {
+									if (x < d6 && x >= -d6) {
+										x = 0.0D;
+									} else if (x > 0.0D) {
+										x -= d6;
+									} else {
+										x += d6;
+									}
+
+									d3 = x;
+
+									if (z < d6 && z >= -d6) {
+										z = 0.0D;
+									} else if (z > 0.0D) {
+										z -= d6;
+									} else {
+										z += d6;
+									}
+								}
+							}
+
+							List&lt;AxisAlignedBB&gt; list1 = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(x, y, z));
+							AxisAlignedBB axisalignedbb = this.getEntityBoundingBox();
+
+							for (AxisAlignedBB axisalignedbb1 : list1) {
+								y = axisalignedbb1.calculateYOffset(this.getEntityBoundingBox(), y);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+							boolean flag1 = this.onGround || d4 != y && d4 < 0.0D;
+
+							for (AxisAlignedBB axisalignedbb2 : list1) {
+								x = axisalignedbb2.calculateXOffset(this.getEntityBoundingBox(), x);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, 0.0D, 0.0D));
+
+							for (AxisAlignedBB axisalignedbb13 : list1) {
+								z = axisalignedbb13.calculateZOffset(this.getEntityBoundingBox(), z);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, 0.0D, z));
+
+							if (this.stepHeight > 0.0F && flag1 && (d3 != x || d5 != z)) {
+								double d11 = x;
+								double d7 = y;
+								double d8 = z;
+								AxisAlignedBB axisalignedbb3 = this.getEntityBoundingBox();
+								this.setEntityBoundingBox(axisalignedbb);
+								y = (double)this.stepHeight;
+								List&lt;AxisAlignedBB&gt; list = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(d3, y, d5));
+								AxisAlignedBB axisalignedbb4 = this.getEntityBoundingBox();
+								AxisAlignedBB axisalignedbb5 = axisalignedbb4.addCoord(d3, 0.0D, d5);
+								double d9 = y;
+
+								for (AxisAlignedBB axisalignedbb6 : list) {
+									d9 = axisalignedbb6.calculateYOffset(axisalignedbb5, d9);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(0.0D, d9, 0.0D);
+								double d15 = d3;
+
+								for (AxisAlignedBB axisalignedbb7 : list) {
+									d15 = axisalignedbb7.calculateXOffset(axisalignedbb4, d15);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(d15, 0.0D, 0.0D);
+								double d16 = d5;
+
+								for (AxisAlignedBB axisalignedbb8 : list) {
+									d16 = axisalignedbb8.calculateZOffset(axisalignedbb4, d16);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(0.0D, 0.0D, d16);
+								AxisAlignedBB axisalignedbb14 = this.getEntityBoundingBox();
+								double d17 = y;
+
+								for (AxisAlignedBB axisalignedbb9 : list) {
+									d17 = axisalignedbb9.calculateYOffset(axisalignedbb14, d17);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(0.0D, d17, 0.0D);
+								double d18 = d3;
+
+								for (AxisAlignedBB axisalignedbb10 : list) {
+									d18 = axisalignedbb10.calculateXOffset(axisalignedbb14, d18);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(d18, 0.0D, 0.0D);
+								double d19 = d5;
+
+								for (AxisAlignedBB axisalignedbb11 : list) {
+									d19 = axisalignedbb11.calculateZOffset(axisalignedbb14, d19);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(0.0D, 0.0D, d19);
+								double d20 = d15 * d15 + d16 * d16;
+								double d10 = d18 * d18 + d19 * d19;
+
+								if (d20 > d10) {
+									x = d15;
+									z = d16;
+									y = -d9;
+									this.setEntityBoundingBox(axisalignedbb4);
+								} else {
+									x = d18;
+									z = d19;
+									y = -d17;
+									this.setEntityBoundingBox(axisalignedbb14);
+								}
+
+								for (AxisAlignedBB axisalignedbb12 : list) {
+									y = axisalignedbb12.calculateYOffset(this.getEntityBoundingBox(), y);
+								}
+
+								this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+
+								if (d11 * d11 + d8 * d8 >= x * x + z * z) {
+									x = d11;
+									y = d7;
+									z = d8;
+									this.setEntityBoundingBox(axisalignedbb3);
+								}
+							}
+
+							this.worldObj.theProfiler.endSection();
+							this.worldObj.theProfiler.startSection("rest");
+							this.resetPositionToBB();
+							this.isCollidedHorizontally = d3 != x || d5 != z;
+							this.isCollidedVertically = d4 != y;
+							this.onGround = this.isCollidedVertically && d4 < 0.0D;
+							this.isCollided = this.isCollidedHorizontally || this.isCollidedVertically;
+							int i = MathHelper.floor_double(this.posX);
+							int j = MathHelper.floor_double(this.posY - 0.20000000298023224D);
+							int k = MathHelper.floor_double(this.posZ);
+							BlockPos blockpos = new BlockPos(i, j, k);
+							Block block1 = this.worldObj.getBlockState(blockpos).getBlock();
+
+							if (block1.getMaterial() == Material.air) {
+								Block block = this.worldObj.getBlockState(blockpos.down()).getBlock();
+
+								if (block instanceof BlockFence || block instanceof BlockWall || block instanceof BlockFenceGate) {
+									block1 = block;
+									blockpos = blockpos.down();
+								}
+							}
+
+							this.updateFallState(y, this.onGround, block1, blockpos);
+
+							if (d3 != x) {
+								this.motionX = 0.0D;
+							}
+
+							if (d5 != z) {
+								this.motionZ = 0.0D;
+							}
+
+							if (d4 != y) {
+								block1.onLanded(this.worldObj, this);
+							}
+
+							if (this.canTriggerWalking() && !flag && this.ridingEntity == null) {
+								double d12 = this.posX - d0;
+								double d13 = this.posY - d1;
+								double d14 = this.posZ - d2;
+
+								if (block1 != Blocks.ladder) {
+									d13 = 0.0D;
+								}
+
+								if (block1 != null && this.onGround) {
+									block1.onEntityCollidedWithBlock(this.worldObj, blockpos, this);
+								}
+
+								this.distanceWalkedModified = (float)((double)this.distanceWalkedModified + (double)MathHelper.sqrt_double(d12 * d12 + d14 * d14) * 0.6D);
+								this.distanceWalkedOnStepModified = (float)((double)this.distanceWalkedOnStepModified + (double)MathHelper.sqrt_double(d12 * d12 + d13 * d13 + d14 * d14) * 0.6D);
+
+								if (this.distanceWalkedOnStepModified > (float)this.nextStepDistance && block1.getMaterial() != Material.air) {
+									this.nextStepDistance = (int)this.distanceWalkedOnStepModified + 1;
+
+									if (this.isInWater()) {
+										float f = MathHelper.sqrt_double(this.motionX * this.motionX * 0.20000000298023224D + this.motionY * this.motionY + this.motionZ * this.motionZ * 0.20000000298023224D) * 0.35F;
+
+										if (f > 1.0F) {
+											f = 1.0F;
+										}
+
+										this.playSound(this.getSwimSound(), f, 1.0F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+									}
+
+									this.playStepSound(blockpos, block1);
+								}
+							}
+
+							try {
+								this.doBlockCollisions();
+							} catch (Throwable throwable) {
+								CrashReport crashreport = CrashReport.makeCrashReport(throwable, "Checking entity block collision");
+								CrashReportCategory crashreportcategory = crashreport.makeCategory("Entity being checked for collision");
+								this.addEntityCrashInfo(crashreportcategory);
+								throw new ReportedException(crashreport);
+							}
+
+							boolean flag2 = this.isWet();
+
+							if (this.worldObj.isFlammableWithin(this.getEntityBoundingBox().contract(0.001D, 0.001D, 0.001D))) {
+								this.dealFireDamage(1);
+
+								if (!flag2) {
+									++this.fire;
+
+									if (this.fire == 0) {
+										this.setFire(8);
+									}
+								}
+							} else if (this.fire <= 0) {
+								this.fire = -this.fireResistance;
+							}
+
+							if (flag2 && this.fire > 0) {
+								this.playSound("random.fizz", 0.7F, 1.6F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+								this.fire = -this.fireResistance;
+							}
+
+							this.worldObj.theProfiler.endSection();
+						}
+<span class="comment">						// @from net.minecraft.entity.Entity.java;<br>						// this.moveEntity(this.motionX, this.motionY, this.motionZ);</span></details>
+						if (this.isCollidedHorizontally && this.isOnLadder()) {
+							this.motionY = 0.2D;
+						}
+
+						if (this.worldObj.isRemote && (!this.worldObj.isBlockLoaded(new BlockPos((int)this.posX, 0, (int)this.posZ)) || !this.worldObj.getChunkFromBlockCoords(new BlockPos((int)this.posX, 0, (int)this.posZ)).isLoaded())) {
+							if (this.posY > 0.0D) {
+								this.motionY = -0.1D;
+							}
+							else {
+								this.motionY = 0.0D;
+							}
+						} else {
+							this.motionY -= 0.08D;
+						}
+
+						this.motionY *= 0.9800000190734863D;
+						this.motionX *= (double)f4;
+						this.motionZ *= (double)f4;
+					} else {
+						double d1 = this.posY;
+<details open style="--tabs: 6; --offset: 0ch; --bottom: 0.75em;"><summary>						@from net.minecraft.entity.Entity.java; @params float strafe, float forward, float friction<br>						this.moveFlying(strafe, forward, 0.02F);</summary>						float f = strafe * strafe + forward * forward;
+
+						if (f >= 1.0E-4F) {
+							f = MathHelper.sqrt_float(f);
+
+							if (f < 1.0F) {
+								f = 1.0F;
+							}
+
+							f = friction / f;
+							strafe = strafe * f;
+							forward = forward * f;
+							float f1 = MathHelper.sin(this.rotationYaw * (float)Math.PI / 180.0F);
+							float f2 = MathHelper.cos(this.rotationYaw * (float)Math.PI / 180.0F);
+							this.motionX += (double)(strafe * f2 - forward * f1);
+							this.motionZ += (double)(forward * f2 + strafe * f1);
+						}
+<span class="comment">						// @from net.minecraft.entity.Entity.java;<br>						// this.moveFlying(strafe, forward, 0.02F);</span></details><details open style="--tabs: 6; --offset: 0ch; --bottom: 0.75em;"><summary>						@from net.minecraft.entity.Entity.java; @params double x, double y, double z<br>						this.moveEntity(this.motionX, this.motionY, this.motionZ);</summary>						if (this.noClip) {
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, y, z));
+							this.resetPositionToBB();
+						} else {
+							this.worldObj.theProfiler.startSection("move");
+							double d0 = this.posX;
+							double d1 = this.posY;
+							double d2 = this.posZ;
+
+							if (this.isInWeb) {
+								this.isInWeb = false;
+								x *= 0.25D;
+								y *= 0.05000000074505806D;
+								z *= 0.25D;
+								this.motionX = 0.0D;
+								this.motionY = 0.0D;
+								this.motionZ = 0.0D;
+							}
+
+							double d3 = x;
+							double d4 = y;
+							double d5 = z;
+							boolean flag = this.onGround && this.isSneaking() && this instanceof EntityPlayer;
+
+							if (flag) {
+								double d6;
+
+								for (d6 = 0.05D; x != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, 0.0D)).isEmpty(); d3 = x) {
+									if (x < d6 && x >= -d6) {
+										x = 0.0D;
+									} else if (x > 0.0D) {
+										x -= d6;
+									} else {
+										x += d6;
+									}
+								}
+
+								for (; z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(0.0D, -1.0D, z)).isEmpty(); d5 = z) {
+									if (z < d6 && z >= -d6) {
+										z = 0.0D;
+									} else if (z > 0.0D) {
+										z -= d6;
+									} else {
+										z += d6;
+									}
+								}
+
+								for (; x != 0.0D && z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, z)).isEmpty(); d5 = z) {
+									if (x < d6 && x >= -d6) {
+										x = 0.0D;
+									} else if (x > 0.0D) {
+										x -= d6;
+									} else {
+										x += d6;
+									}
+
+									d3 = x;
+
+									if (z < d6 && z >= -d6) {
+										z = 0.0D;
+									} else if (z > 0.0D) {
+										z -= d6;
+									} else {
+										z += d6;
+									}
+								}
+							}
+
+							List&lt;AxisAlignedBB&gt; list1 = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(x, y, z));
+							AxisAlignedBB axisalignedbb = this.getEntityBoundingBox();
+
+							for (AxisAlignedBB axisalignedbb1 : list1) {
+								y = axisalignedbb1.calculateYOffset(this.getEntityBoundingBox(), y);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+							boolean flag1 = this.onGround || d4 != y && d4 < 0.0D;
+
+							for (AxisAlignedBB axisalignedbb2 : list1) {
+								x = axisalignedbb2.calculateXOffset(this.getEntityBoundingBox(), x);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, 0.0D, 0.0D));
+
+							for (AxisAlignedBB axisalignedbb13 : list1) {
+								z = axisalignedbb13.calculateZOffset(this.getEntityBoundingBox(), z);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, 0.0D, z));
+
+							if (this.stepHeight > 0.0F && flag1 && (d3 != x || d5 != z)) {
+								double d11 = x;
+								double d7 = y;
+								double d8 = z;
+								AxisAlignedBB axisalignedbb3 = this.getEntityBoundingBox();
+								this.setEntityBoundingBox(axisalignedbb);
+								y = (double)this.stepHeight;
+								List&lt;AxisAlignedBB&gt; list = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(d3, y, d5));
+								AxisAlignedBB axisalignedbb4 = this.getEntityBoundingBox();
+								AxisAlignedBB axisalignedbb5 = axisalignedbb4.addCoord(d3, 0.0D, d5);
+								double d9 = y;
+
+								for (AxisAlignedBB axisalignedbb6 : list) {
+									d9 = axisalignedbb6.calculateYOffset(axisalignedbb5, d9);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(0.0D, d9, 0.0D);
+								double d15 = d3;
+
+								for (AxisAlignedBB axisalignedbb7 : list) {
+									d15 = axisalignedbb7.calculateXOffset(axisalignedbb4, d15);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(d15, 0.0D, 0.0D);
+								double d16 = d5;
+
+								for (AxisAlignedBB axisalignedbb8 : list) {
+									d16 = axisalignedbb8.calculateZOffset(axisalignedbb4, d16);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(0.0D, 0.0D, d16);
+								AxisAlignedBB axisalignedbb14 = this.getEntityBoundingBox();
+								double d17 = y;
+
+								for (AxisAlignedBB axisalignedbb9 : list) {
+									d17 = axisalignedbb9.calculateYOffset(axisalignedbb14, d17);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(0.0D, d17, 0.0D);
+								double d18 = d3;
+
+								for (AxisAlignedBB axisalignedbb10 : list) {
+									d18 = axisalignedbb10.calculateXOffset(axisalignedbb14, d18);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(d18, 0.0D, 0.0D);
+								double d19 = d5;
+
+								for (AxisAlignedBB axisalignedbb11 : list) {
+									d19 = axisalignedbb11.calculateZOffset(axisalignedbb14, d19);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(0.0D, 0.0D, d19);
+								double d20 = d15 * d15 + d16 * d16;
+								double d10 = d18 * d18 + d19 * d19;
+
+								if (d20 > d10) {
+									x = d15;
+									z = d16;
+									y = -d9;
+									this.setEntityBoundingBox(axisalignedbb4);
+								} else {
+									x = d18;
+									z = d19;
+									y = -d17;
+									this.setEntityBoundingBox(axisalignedbb14);
+								}
+
+								for (AxisAlignedBB axisalignedbb12 : list) {
+									y = axisalignedbb12.calculateYOffset(this.getEntityBoundingBox(), y);
+								}
+
+								this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+
+								if (d11 * d11 + d8 * d8 >= x * x + z * z) {
+									x = d11;
+									y = d7;
+									z = d8;
+									this.setEntityBoundingBox(axisalignedbb3);
+								}
+							}
+
+							this.worldObj.theProfiler.endSection();
+							this.worldObj.theProfiler.startSection("rest");
+							this.resetPositionToBB();
+							this.isCollidedHorizontally = d3 != x || d5 != z;
+							this.isCollidedVertically = d4 != y;
+							this.onGround = this.isCollidedVertically && d4 < 0.0D;
+							this.isCollided = this.isCollidedHorizontally || this.isCollidedVertically;
+							int i = MathHelper.floor_double(this.posX);
+							int j = MathHelper.floor_double(this.posY - 0.20000000298023224D);
+							int k = MathHelper.floor_double(this.posZ);
+							BlockPos blockpos = new BlockPos(i, j, k);
+							Block block1 = this.worldObj.getBlockState(blockpos).getBlock();
+
+							if (block1.getMaterial() == Material.air) {
+								Block block = this.worldObj.getBlockState(blockpos.down()).getBlock();
+
+								if (block instanceof BlockFence || block instanceof BlockWall || block instanceof BlockFenceGate) {
+									block1 = block;
+									blockpos = blockpos.down();
+								}
+							}
+
+							this.updateFallState(y, this.onGround, block1, blockpos);
+
+							if (d3 != x) {
+								this.motionX = 0.0D;
+							}
+
+							if (d5 != z) {
+								this.motionZ = 0.0D;
+							}
+
+							if (d4 != y) {
+								block1.onLanded(this.worldObj, this);
+							}
+
+							if (this.canTriggerWalking() && !flag && this.ridingEntity == null) {
+								double d12 = this.posX - d0;
+								double d13 = this.posY - d1;
+								double d14 = this.posZ - d2;
+
+								if (block1 != Blocks.ladder) {
+									d13 = 0.0D;
+								}
+
+								if (block1 != null && this.onGround) {
+									block1.onEntityCollidedWithBlock(this.worldObj, blockpos, this);
+								}
+
+								this.distanceWalkedModified = (float)((double)this.distanceWalkedModified + (double)MathHelper.sqrt_double(d12 * d12 + d14 * d14) * 0.6D);
+								this.distanceWalkedOnStepModified = (float)((double)this.distanceWalkedOnStepModified + (double)MathHelper.sqrt_double(d12 * d12 + d13 * d13 + d14 * d14) * 0.6D);
+
+								if (this.distanceWalkedOnStepModified > (float)this.nextStepDistance && block1.getMaterial() != Material.air) {
+									this.nextStepDistance = (int)this.distanceWalkedOnStepModified + 1;
+
+									if (this.isInWater()) {
+										float f = MathHelper.sqrt_double(this.motionX * this.motionX * 0.20000000298023224D + this.motionY * this.motionY + this.motionZ * this.motionZ * 0.20000000298023224D) * 0.35F;
+
+										if (f > 1.0F) {
+											f = 1.0F;
+										}
+
+										this.playSound(this.getSwimSound(), f, 1.0F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+									}
+
+									this.playStepSound(blockpos, block1);
+								}
+							}
+
+							try {
+								this.doBlockCollisions();
+							} catch (Throwable throwable) {
+								CrashReport crashreport = CrashReport.makeCrashReport(throwable, "Checking entity block collision");
+								CrashReportCategory crashreportcategory = crashreport.makeCategory("Entity being checked for collision");
+								this.addEntityCrashInfo(crashreportcategory);
+								throw new ReportedException(crashreport);
+							}
+
+							boolean flag2 = this.isWet();
+
+							if (this.worldObj.isFlammableWithin(this.getEntityBoundingBox().contract(0.001D, 0.001D, 0.001D))) {
+								this.dealFireDamage(1);
+
+								if (!flag2) {
+									++this.fire;
+
+									if (this.fire == 0) {
+										this.setFire(8);
+									}
+								}
+							} else if (this.fire <= 0) {
+								this.fire = -this.fireResistance;
+							}
+
+							if (flag2 && this.fire > 0) {
+								this.playSound("random.fizz", 0.7F, 1.6F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+								this.fire = -this.fireResistance;
+							}
+
+							this.worldObj.theProfiler.endSection();
+						}
+<span class="comment">						// @from net.minecraft.entity.Entity.java;<br>						// this.moveEntity(this.motionX, this.motionY, this.motionZ);</span></details>
+						this.motionX *= 0.5D;
+						this.motionY *= 0.5D;
+						this.motionZ *= 0.5D;
+						this.motionY -= 0.02D;
+
+						if (this.isCollidedHorizontally && this.isOffsetPositionInLiquid(this.motionX, this.motionY + 0.6000000238418579D - this.posY + d1, this.motionZ)) {
+							this.motionY = 0.30000001192092896D;
+						}
+					}
+				} else {
+					double d0 = this.posY;
+					float f1 = 0.8F;
+					float f2 = 0.02F;
+					float f3 = (float)EnchantmentHelper.getDepthStriderModifier(this);
+
+					if (f3 > 3.0F) {
+						f3 = 3.0F;
+					}
+
+					if (!this.onGround) {
+						f3 *= 0.5F;
+					}
+
+					if (f3 > 0.0F) {
+						f1 += (0.54600006F - f1) * f3 / 3.0F;
+						f2 += (this.getAIMoveSpeed() * 1.0F - f2) * f3 / 3.0F;
+					}
+
+<details open style="--tabs: 5; --offset: 0ch; --bottom: 0.75em;"><summary>					@from net.minecraft.entity.Entity.java; @params float strafe, float forward, float friction<br>					this.moveFlying(strafe, forward, f2);</summary>					float f = strafe * strafe + forward * forward;
+
+					if (f >= 1.0E-4F) {
+						f = MathHelper.sqrt_float(f);
+
+						if (f < 1.0F) {
+							f = 1.0F;
+						}
+
+						f = friction / f;
+						strafe = strafe * f;
+						forward = forward * f;
+						float f1 = MathHelper.sin(this.rotationYaw * (float)Math.PI / 180.0F);
+						float f2 = MathHelper.cos(this.rotationYaw * (float)Math.PI / 180.0F);
+						this.motionX += (double)(strafe * f2 - forward * f1);
+						this.motionZ += (double)(forward * f2 + strafe * f1);
+					}
+<span class="comment">					// @from net.minecraft.entity.Entity.java;<br>					// this.moveFlying(strafe, forward, f2);</span></details><details open style="--tabs: 5; --offset: 0ch; --bottom: 0.75em;"><summary>					@from net.minecraft.entity.Entity.java; @params double x, double y, double z<br>					this.moveEntity(this.motionX, this.motionY, this.motionZ);</summary>					if (this.noClip) {
+						this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, y, z));
+						this.resetPositionToBB();
+					} else {
+						this.worldObj.theProfiler.startSection("move");
+						double d0 = this.posX;
+						double d1 = this.posY;
+						double d2 = this.posZ;
+
+						if (this.isInWeb) {
+							this.isInWeb = false;
+							x *= 0.25D;
+							y *= 0.05000000074505806D;
+							z *= 0.25D;
+							this.motionX = 0.0D;
+							this.motionY = 0.0D;
+							this.motionZ = 0.0D;
+						}
+
+						double d3 = x;
+						double d4 = y;
+						double d5 = z;
+						boolean flag = this.onGround && this.isSneaking() && this instanceof EntityPlayer;
+
+						if (flag) {
+							double d6;
+
+							for (d6 = 0.05D; x != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, 0.0D)).isEmpty(); d3 = x) {
+								if (x < d6 && x >= -d6) {
+									x = 0.0D;
+								} else if (x > 0.0D) {
+									x -= d6;
+								} else {
+									x += d6;
+								}
+							}
+
+							for (; z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(0.0D, -1.0D, z)).isEmpty(); d5 = z) {
+								if (z < d6 && z >= -d6) {
+									z = 0.0D;
+								} else if (z > 0.0D) {
+									z -= d6;
+								} else {
+									z += d6;
+								}
+							}
+
+							for (; x != 0.0D && z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, z)).isEmpty(); d5 = z) {
+								if (x < d6 && x >= -d6) {
+									x = 0.0D;
+								} else if (x > 0.0D) {
+									x -= d6;
+								} else {
+									x += d6;
+								}
+
+								d3 = x;
+
+								if (z < d6 && z >= -d6) {
+									z = 0.0D;
+								} else if (z > 0.0D) {
+									z -= d6;
+								} else {
+									z += d6;
+								}
+							}
+						}
+
+						List&lt;AxisAlignedBB&gt; list1 = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(x, y, z));
+						AxisAlignedBB axisalignedbb = this.getEntityBoundingBox();
+
+						for (AxisAlignedBB axisalignedbb1 : list1) {
+							y = axisalignedbb1.calculateYOffset(this.getEntityBoundingBox(), y);
+						}
+
+						this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+						boolean flag1 = this.onGround || d4 != y && d4 < 0.0D;
+
+						for (AxisAlignedBB axisalignedbb2 : list1) {
+							x = axisalignedbb2.calculateXOffset(this.getEntityBoundingBox(), x);
+						}
+
+						this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, 0.0D, 0.0D));
+
+						for (AxisAlignedBB axisalignedbb13 : list1) {
+							z = axisalignedbb13.calculateZOffset(this.getEntityBoundingBox(), z);
+						}
+
+						this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, 0.0D, z));
+
+						if (this.stepHeight > 0.0F && flag1 && (d3 != x || d5 != z)) {
+							double d11 = x;
+							double d7 = y;
+							double d8 = z;
+							AxisAlignedBB axisalignedbb3 = this.getEntityBoundingBox();
+							this.setEntityBoundingBox(axisalignedbb);
+							y = (double)this.stepHeight;
+							List&lt;AxisAlignedBB&gt; list = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(d3, y, d5));
+							AxisAlignedBB axisalignedbb4 = this.getEntityBoundingBox();
+							AxisAlignedBB axisalignedbb5 = axisalignedbb4.addCoord(d3, 0.0D, d5);
+							double d9 = y;
+
+							for (AxisAlignedBB axisalignedbb6 : list) {
+								d9 = axisalignedbb6.calculateYOffset(axisalignedbb5, d9);
+							}
+
+							axisalignedbb4 = axisalignedbb4.offset(0.0D, d9, 0.0D);
+							double d15 = d3;
+
+							for (AxisAlignedBB axisalignedbb7 : list) {
+								d15 = axisalignedbb7.calculateXOffset(axisalignedbb4, d15);
+							}
+
+							axisalignedbb4 = axisalignedbb4.offset(d15, 0.0D, 0.0D);
+							double d16 = d5;
+
+							for (AxisAlignedBB axisalignedbb8 : list) {
+								d16 = axisalignedbb8.calculateZOffset(axisalignedbb4, d16);
+							}
+
+							axisalignedbb4 = axisalignedbb4.offset(0.0D, 0.0D, d16);
+							AxisAlignedBB axisalignedbb14 = this.getEntityBoundingBox();
+							double d17 = y;
+
+							for (AxisAlignedBB axisalignedbb9 : list) {
+								d17 = axisalignedbb9.calculateYOffset(axisalignedbb14, d17);
+							}
+
+							axisalignedbb14 = axisalignedbb14.offset(0.0D, d17, 0.0D);
+							double d18 = d3;
+
+							for (AxisAlignedBB axisalignedbb10 : list) {
+								d18 = axisalignedbb10.calculateXOffset(axisalignedbb14, d18);
+							}
+
+							axisalignedbb14 = axisalignedbb14.offset(d18, 0.0D, 0.0D);
+							double d19 = d5;
+
+							for (AxisAlignedBB axisalignedbb11 : list) {
+								d19 = axisalignedbb11.calculateZOffset(axisalignedbb14, d19);
+							}
+
+							axisalignedbb14 = axisalignedbb14.offset(0.0D, 0.0D, d19);
+							double d20 = d15 * d15 + d16 * d16;
+							double d10 = d18 * d18 + d19 * d19;
+
+							if (d20 > d10) {
+								x = d15;
+								z = d16;
+								y = -d9;
+								this.setEntityBoundingBox(axisalignedbb4);
+							} else {
+								x = d18;
+								z = d19;
+								y = -d17;
+								this.setEntityBoundingBox(axisalignedbb14);
+							}
+
+							for (AxisAlignedBB axisalignedbb12 : list) {
+								y = axisalignedbb12.calculateYOffset(this.getEntityBoundingBox(), y);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+
+							if (d11 * d11 + d8 * d8 >= x * x + z * z) {
+								x = d11;
+								y = d7;
+								z = d8;
+								this.setEntityBoundingBox(axisalignedbb3);
+							}
+						}
+
+						this.worldObj.theProfiler.endSection();
+						this.worldObj.theProfiler.startSection("rest");
+						this.resetPositionToBB();
+						this.isCollidedHorizontally = d3 != x || d5 != z;
+						this.isCollidedVertically = d4 != y;
+						this.onGround = this.isCollidedVertically && d4 < 0.0D;
+						this.isCollided = this.isCollidedHorizontally || this.isCollidedVertically;
+						int i = MathHelper.floor_double(this.posX);
+						int j = MathHelper.floor_double(this.posY - 0.20000000298023224D);
+						int k = MathHelper.floor_double(this.posZ);
+						BlockPos blockpos = new BlockPos(i, j, k);
+						Block block1 = this.worldObj.getBlockState(blockpos).getBlock();
+
+						if (block1.getMaterial() == Material.air) {
+							Block block = this.worldObj.getBlockState(blockpos.down()).getBlock();
+
+							if (block instanceof BlockFence || block instanceof BlockWall || block instanceof BlockFenceGate) {
+								block1 = block;
+								blockpos = blockpos.down();
+							}
+						}
+
+						this.updateFallState(y, this.onGround, block1, blockpos);
+
+						if (d3 != x) {
+							this.motionX = 0.0D;
+						}
+
+						if (d5 != z) {
+							this.motionZ = 0.0D;
+						}
+
+						if (d4 != y) {
+							block1.onLanded(this.worldObj, this);
+						}
+
+						if (this.canTriggerWalking() && !flag && this.ridingEntity == null) {
+							double d12 = this.posX - d0;
+							double d13 = this.posY - d1;
+							double d14 = this.posZ - d2;
+
+							if (block1 != Blocks.ladder) {
+								d13 = 0.0D;
+							}
+
+							if (block1 != null && this.onGround) {
+								block1.onEntityCollidedWithBlock(this.worldObj, blockpos, this);
+							}
+
+							this.distanceWalkedModified = (float)((double)this.distanceWalkedModified + (double)MathHelper.sqrt_double(d12 * d12 + d14 * d14) * 0.6D);
+							this.distanceWalkedOnStepModified = (float)((double)this.distanceWalkedOnStepModified + (double)MathHelper.sqrt_double(d12 * d12 + d13 * d13 + d14 * d14) * 0.6D);
+
+							if (this.distanceWalkedOnStepModified > (float)this.nextStepDistance && block1.getMaterial() != Material.air) {
+								this.nextStepDistance = (int)this.distanceWalkedOnStepModified + 1;
+
+								if (this.isInWater()) {
+									float f = MathHelper.sqrt_double(this.motionX * this.motionX * 0.20000000298023224D + this.motionY * this.motionY + this.motionZ * this.motionZ * 0.20000000298023224D) * 0.35F;
+
+									if (f > 1.0F) {
+										f = 1.0F;
+									}
+
+									this.playSound(this.getSwimSound(), f, 1.0F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+								}
+
+								this.playStepSound(blockpos, block1);
+							}
+						}
+
+						try {
+							this.doBlockCollisions();
+						} catch (Throwable throwable) {
+							CrashReport crashreport = CrashReport.makeCrashReport(throwable, "Checking entity block collision");
+							CrashReportCategory crashreportcategory = crashreport.makeCategory("Entity being checked for collision");
+							this.addEntityCrashInfo(crashreportcategory);
+							throw new ReportedException(crashreport);
+						}
+
+						boolean flag2 = this.isWet();
+
+						if (this.worldObj.isFlammableWithin(this.getEntityBoundingBox().contract(0.001D, 0.001D, 0.001D))) {
+							this.dealFireDamage(1);
+
+							if (!flag2) {
+								++this.fire;
+
+								if (this.fire == 0) {
+									this.setFire(8);
+								}
+							}
+						} else if (this.fire <= 0) {
+							this.fire = -this.fireResistance;
+						}
+
+						if (flag2 && this.fire > 0) {
+							this.playSound("random.fizz", 0.7F, 1.6F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+							this.fire = -this.fireResistance;
+						}
+
+						this.worldObj.theProfiler.endSection();
+					}
+<span class="comment">					// @from net.minecraft.entity.Entity.java;<br>					// this.moveEntity(this.motionX, this.motionY, this.motionZ);</span></details>                	this.motionX *= (double)f1;
+					this.motionY *= 0.800000011920929D;
+					this.motionZ *= (double)f1;
+					this.motionY -= 0.02D;
+
+					if (this.isCollidedHorizontally && this.isOffsetPositionInLiquid(this.motionX, this.motionY + 0.6000000238418579D - this.posY + d0, this.motionZ)) {
+						this.motionY = 0.30000001192092896D;
+					}
+				}
+			}
+
+			this.prevLimbSwingAmount = this.limbSwingAmount;
+			double d2 = this.posX - this.prevPosX;
+			double d3 = this.posZ - this.prevPosZ;
+			float f7 = MathHelper.sqrt_double(d2 * d2 + d3 * d3) * 4.0F;
+
+			if (f7 > 1.0F) {
+				f7 = 1.0F;
+			}
+
+			this.limbSwingAmount += (f7 - this.limbSwingAmount) * 0.4F;
+			this.limbSwing += this.limbSwingAmount;
+<span class="comment">			// @from net.minecraft.entity.EntityLivingBase.java;<br>			// super.moveEntityWithHeading(strafe, forward);</span></details>            this.motionY = d3 * 0.6D;
+            this.jumpMovementFactor = f;
+        } else {
+<details open style="--tabs: 3; --offset: 0ch; --bottom: 0.75em;"><summary>			@from net.minecraft.entity.EntityLivingBase.java; @params float strafe, float forward<br>        	super.moveEntityWithHeading(this.moveStrafing, this.moveForward);</summary>			if (this.isServerWorld()) {
+				if (!this.isInWater() || this instanceof EntityPlayer && ((EntityPlayer)this).capabilities.isFlying) {
+					if (!this.isInLava() || this instanceof EntityPlayer && ((EntityPlayer)this).capabilities.isFlying) {
+						float f4 = 0.91F;
+
+						if (this.onGround) {
+							f4 = this.worldObj.getBlockState(new BlockPos(MathHelper.floor_double(this.posX), MathHelper.floor_double(this.getEntityBoundingBox().minY) - 1, MathHelper.floor_double(this.posZ))).getBlock().slipperiness * 0.91F;
+						}
+
+						float f = 0.16277136F / (f4 * f4 * f4);
+						float f5;
+
+						if (this.onGround) {
+							f5 = this.getAIMoveSpeed() * f;
+						} else {
+							f5 = this.jumpMovementFactor;
+						}
+						
+<details open style="--tabs: 6; --offset: 0ch; --bottom: 0.75em;"><summary>						@from net.minecraft.entity.Entity.java; @params float strafe, float forward, float friction<br>						this.moveFlying(strafe, forward, f5);</summary>						float f = strafe * strafe + forward * forward;
+
+						if (f >= 1.0E-4F) {
+							f = MathHelper.sqrt_float(f);
+
+							if (f < 1.0F) {
+								f = 1.0F;
+							}
+
+							f = friction / f;
+							strafe = strafe * f;
+							forward = forward * f;
+							float f1 = MathHelper.sin(this.rotationYaw * (float)Math.PI / 180.0F);
+							float f2 = MathHelper.cos(this.rotationYaw * (float)Math.PI / 180.0F);
+							this.motionX += (double)(strafe * f2 - forward * f1);
+							this.motionZ += (double)(forward * f2 + strafe * f1);
+						}
+<span class="comment">						// @from net.minecraft.entity.Entity.java;<br>						// this.moveFlying(strafe, forward, f5);</span></details>                    	f4 = 0.91F;
+
+						if (this.onGround) {
+							f4 = this.worldObj.getBlockState(new BlockPos(MathHelper.floor_double(this.posX), MathHelper.floor_double(this.getEntityBoundingBox().minY) - 1, MathHelper.floor_double(this.posZ))).getBlock().slipperiness * 0.91F;
+						}
+
+						if (this.isOnLadder()) {
+							float f6 = 0.15F;
+							this.motionX = MathHelper.clamp_double(this.motionX, (double)(-f6), (double)f6);
+							this.motionZ = MathHelper.clamp_double(this.motionZ, (double)(-f6), (double)f6);
+							this.fallDistance = 0.0F;
+
+							if (this.motionY < -0.15D) {
+								this.motionY = -0.15D;
+							}
+
+							boolean flag = this.isSneaking() && this instanceof EntityPlayer;
+
+							if (flag && this.motionY < 0.0D) {
+								this.motionY = 0.0D;
+							}
+						}
+						
+<details open style="--tabs: 6; --offset: 0ch; --bottom: 0.75em;"><summary>						@from net.minecraft.entity.Entity.java; @params double x, double y, double z<br>						this.moveEntity(this.motionX, this.motionY, this.motionZ);</summary>						if (this.noClip) {
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, y, z));
+							this.resetPositionToBB();
+						} else {
+							this.worldObj.theProfiler.startSection("move");
+							double d0 = this.posX;
+							double d1 = this.posY;
+							double d2 = this.posZ;
+
+							if (this.isInWeb) {
+								this.isInWeb = false;
+								x *= 0.25D;
+								y *= 0.05000000074505806D;
+								z *= 0.25D;
+								this.motionX = 0.0D;
+								this.motionY = 0.0D;
+								this.motionZ = 0.0D;
+							}
+
+							double d3 = x;
+							double d4 = y;
+							double d5 = z;
+							boolean flag = this.onGround && this.isSneaking() && this instanceof EntityPlayer;
+
+							if (flag) {
+								double d6;
+
+								for (d6 = 0.05D; x != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, 0.0D)).isEmpty(); d3 = x) {
+									if (x < d6 && x >= -d6) {
+										x = 0.0D;
+									} else if (x > 0.0D) {
+										x -= d6;
+									} else {
+										x += d6;
+									}
+								}
+
+								for (; z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(0.0D, -1.0D, z)).isEmpty(); d5 = z) {
+									if (z < d6 && z >= -d6) {
+										z = 0.0D;
+									} else if (z > 0.0D) {
+										z -= d6;
+									} else {
+										z += d6;
+									}
+								}
+
+								for (; x != 0.0D && z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, z)).isEmpty(); d5 = z) {
+									if (x < d6 && x >= -d6) {
+										x = 0.0D;
+									} else if (x > 0.0D) {
+										x -= d6;
+									} else {
+										x += d6;
+									}
+
+									d3 = x;
+
+									if (z < d6 && z >= -d6) {
+										z = 0.0D;
+									} else if (z > 0.0D) {
+										z -= d6;
+									} else {
+										z += d6;
+									}
+								}
+							}
+
+							List&lt;AxisAlignedBB&gt; list1 = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(x, y, z));
+							AxisAlignedBB axisalignedbb = this.getEntityBoundingBox();
+
+							for (AxisAlignedBB axisalignedbb1 : list1) {
+								y = axisalignedbb1.calculateYOffset(this.getEntityBoundingBox(), y);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+							boolean flag1 = this.onGround || d4 != y && d4 < 0.0D;
+
+							for (AxisAlignedBB axisalignedbb2 : list1) {
+								x = axisalignedbb2.calculateXOffset(this.getEntityBoundingBox(), x);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, 0.0D, 0.0D));
+
+							for (AxisAlignedBB axisalignedbb13 : list1) {
+								z = axisalignedbb13.calculateZOffset(this.getEntityBoundingBox(), z);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, 0.0D, z));
+
+							if (this.stepHeight > 0.0F && flag1 && (d3 != x || d5 != z)) {
+								double d11 = x;
+								double d7 = y;
+								double d8 = z;
+								AxisAlignedBB axisalignedbb3 = this.getEntityBoundingBox();
+								this.setEntityBoundingBox(axisalignedbb);
+								y = (double)this.stepHeight;
+								List&lt;AxisAlignedBB&gt; list = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(d3, y, d5));
+								AxisAlignedBB axisalignedbb4 = this.getEntityBoundingBox();
+								AxisAlignedBB axisalignedbb5 = axisalignedbb4.addCoord(d3, 0.0D, d5);
+								double d9 = y;
+
+								for (AxisAlignedBB axisalignedbb6 : list) {
+									d9 = axisalignedbb6.calculateYOffset(axisalignedbb5, d9);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(0.0D, d9, 0.0D);
+								double d15 = d3;
+
+								for (AxisAlignedBB axisalignedbb7 : list) {
+									d15 = axisalignedbb7.calculateXOffset(axisalignedbb4, d15);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(d15, 0.0D, 0.0D);
+								double d16 = d5;
+
+								for (AxisAlignedBB axisalignedbb8 : list) {
+									d16 = axisalignedbb8.calculateZOffset(axisalignedbb4, d16);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(0.0D, 0.0D, d16);
+								AxisAlignedBB axisalignedbb14 = this.getEntityBoundingBox();
+								double d17 = y;
+
+								for (AxisAlignedBB axisalignedbb9 : list) {
+									d17 = axisalignedbb9.calculateYOffset(axisalignedbb14, d17);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(0.0D, d17, 0.0D);
+								double d18 = d3;
+
+								for (AxisAlignedBB axisalignedbb10 : list) {
+									d18 = axisalignedbb10.calculateXOffset(axisalignedbb14, d18);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(d18, 0.0D, 0.0D);
+								double d19 = d5;
+
+								for (AxisAlignedBB axisalignedbb11 : list) {
+									d19 = axisalignedbb11.calculateZOffset(axisalignedbb14, d19);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(0.0D, 0.0D, d19);
+								double d20 = d15 * d15 + d16 * d16;
+								double d10 = d18 * d18 + d19 * d19;
+
+								if (d20 > d10) {
+									x = d15;
+									z = d16;
+									y = -d9;
+									this.setEntityBoundingBox(axisalignedbb4);
+								} else {
+									x = d18;
+									z = d19;
+									y = -d17;
+									this.setEntityBoundingBox(axisalignedbb14);
+								}
+
+								for (AxisAlignedBB axisalignedbb12 : list) {
+									y = axisalignedbb12.calculateYOffset(this.getEntityBoundingBox(), y);
+								}
+
+								this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+
+								if (d11 * d11 + d8 * d8 >= x * x + z * z) {
+									x = d11;
+									y = d7;
+									z = d8;
+									this.setEntityBoundingBox(axisalignedbb3);
+								}
+							}
+
+							this.worldObj.theProfiler.endSection();
+							this.worldObj.theProfiler.startSection("rest");
+							this.resetPositionToBB();
+							this.isCollidedHorizontally = d3 != x || d5 != z;
+							this.isCollidedVertically = d4 != y;
+							this.onGround = this.isCollidedVertically && d4 < 0.0D;
+							this.isCollided = this.isCollidedHorizontally || this.isCollidedVertically;
+							int i = MathHelper.floor_double(this.posX);
+							int j = MathHelper.floor_double(this.posY - 0.20000000298023224D);
+							int k = MathHelper.floor_double(this.posZ);
+							BlockPos blockpos = new BlockPos(i, j, k);
+							Block block1 = this.worldObj.getBlockState(blockpos).getBlock();
+
+							if (block1.getMaterial() == Material.air) {
+								Block block = this.worldObj.getBlockState(blockpos.down()).getBlock();
+
+								if (block instanceof BlockFence || block instanceof BlockWall || block instanceof BlockFenceGate) {
+									block1 = block;
+									blockpos = blockpos.down();
+								}
+							}
+
+							this.updateFallState(y, this.onGround, block1, blockpos);
+
+							if (d3 != x) {
+								this.motionX = 0.0D;
+							}
+
+							if (d5 != z) {
+								this.motionZ = 0.0D;
+							}
+
+							if (d4 != y) {
+								block1.onLanded(this.worldObj, this);
+							}
+
+							if (this.canTriggerWalking() && !flag && this.ridingEntity == null) {
+								double d12 = this.posX - d0;
+								double d13 = this.posY - d1;
+								double d14 = this.posZ - d2;
+
+								if (block1 != Blocks.ladder) {
+									d13 = 0.0D;
+								}
+
+								if (block1 != null && this.onGround) {
+									block1.onEntityCollidedWithBlock(this.worldObj, blockpos, this);
+								}
+
+								this.distanceWalkedModified = (float)((double)this.distanceWalkedModified + (double)MathHelper.sqrt_double(d12 * d12 + d14 * d14) * 0.6D);
+								this.distanceWalkedOnStepModified = (float)((double)this.distanceWalkedOnStepModified + (double)MathHelper.sqrt_double(d12 * d12 + d13 * d13 + d14 * d14) * 0.6D);
+
+								if (this.distanceWalkedOnStepModified > (float)this.nextStepDistance && block1.getMaterial() != Material.air) {
+									this.nextStepDistance = (int)this.distanceWalkedOnStepModified + 1;
+
+									if (this.isInWater()) {
+										float f = MathHelper.sqrt_double(this.motionX * this.motionX * 0.20000000298023224D + this.motionY * this.motionY + this.motionZ * this.motionZ * 0.20000000298023224D) * 0.35F;
+
+										if (f > 1.0F) {
+											f = 1.0F;
+										}
+
+										this.playSound(this.getSwimSound(), f, 1.0F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+									}
+
+									this.playStepSound(blockpos, block1);
+								}
+							}
+
+							try {
+								this.doBlockCollisions();
+							} catch (Throwable throwable) {
+								CrashReport crashreport = CrashReport.makeCrashReport(throwable, "Checking entity block collision");
+								CrashReportCategory crashreportcategory = crashreport.makeCategory("Entity being checked for collision");
+								this.addEntityCrashInfo(crashreportcategory);
+								throw new ReportedException(crashreport);
+							}
+
+							boolean flag2 = this.isWet();
+
+							if (this.worldObj.isFlammableWithin(this.getEntityBoundingBox().contract(0.001D, 0.001D, 0.001D))) {
+								this.dealFireDamage(1);
+
+								if (!flag2) {
+									++this.fire;
+
+									if (this.fire == 0) {
+										this.setFire(8);
+									}
+								}
+							} else if (this.fire <= 0) {
+								this.fire = -this.fireResistance;
+							}
+
+							if (flag2 && this.fire > 0) {
+								this.playSound("random.fizz", 0.7F, 1.6F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+								this.fire = -this.fireResistance;
+							}
+
+							this.worldObj.theProfiler.endSection();
+						}
+<span class="comment">						// @from net.minecraft.entity.Entity.java;<br>						// this.moveEntity(this.motionX, this.motionY, this.motionZ);</span></details>
+						if (this.isCollidedHorizontally && this.isOnLadder()) {
+							this.motionY = 0.2D;
+						}
+
+						if (this.worldObj.isRemote && (!this.worldObj.isBlockLoaded(new BlockPos((int)this.posX, 0, (int)this.posZ)) || !this.worldObj.getChunkFromBlockCoords(new BlockPos((int)this.posX, 0, (int)this.posZ)).isLoaded())) {
+							if (this.posY > 0.0D) {
+								this.motionY = -0.1D;
+							}
+							else {
+								this.motionY = 0.0D;
+							}
+						} else {
+							this.motionY -= 0.08D;
+						}
+
+						this.motionY *= 0.9800000190734863D;
+						this.motionX *= (double)f4;
+						this.motionZ *= (double)f4;
+					} else {
+						double d1 = this.posY;
+<details open style="--tabs: 6; --offset: 0ch; --bottom: 0.75em;"><summary>						@from net.minecraft.entity.Entity.java; @params float strafe, float forward, float friction<br>						this.moveFlying(strafe, forward, 0.02F);</summary>						float f = strafe * strafe + forward * forward;
+
+						if (f >= 1.0E-4F) {
+							f = MathHelper.sqrt_float(f);
+
+							if (f < 1.0F) {
+								f = 1.0F;
+							}
+
+							f = friction / f;
+							strafe = strafe * f;
+							forward = forward * f;
+							float f1 = MathHelper.sin(this.rotationYaw * (float)Math.PI / 180.0F);
+							float f2 = MathHelper.cos(this.rotationYaw * (float)Math.PI / 180.0F);
+							this.motionX += (double)(strafe * f2 - forward * f1);
+							this.motionZ += (double)(forward * f2 + strafe * f1);
+						}
+<span class="comment">						// @from net.minecraft.entity.Entity.java;<br>						// this.moveFlying(strafe, forward, 0.02F);</span></details><details open style="--tabs: 6; --offset: 0ch; --bottom: 0.75em;"><summary>						@from net.minecraft.entity.Entity.java; @params double x, double y, double z<br>						this.moveEntity(this.motionX, this.motionY, this.motionZ);</summary>						if (this.noClip) {
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, y, z));
+							this.resetPositionToBB();
+						} else {
+							this.worldObj.theProfiler.startSection("move");
+							double d0 = this.posX;
+							double d1 = this.posY;
+							double d2 = this.posZ;
+
+							if (this.isInWeb) {
+								this.isInWeb = false;
+								x *= 0.25D;
+								y *= 0.05000000074505806D;
+								z *= 0.25D;
+								this.motionX = 0.0D;
+								this.motionY = 0.0D;
+								this.motionZ = 0.0D;
+							}
+
+							double d3 = x;
+							double d4 = y;
+							double d5 = z;
+							boolean flag = this.onGround && this.isSneaking() && this instanceof EntityPlayer;
+
+							if (flag) {
+								double d6;
+
+								for (d6 = 0.05D; x != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, 0.0D)).isEmpty(); d3 = x) {
+									if (x < d6 && x >= -d6) {
+										x = 0.0D;
+									} else if (x > 0.0D) {
+										x -= d6;
+									} else {
+										x += d6;
+									}
+								}
+
+								for (; z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(0.0D, -1.0D, z)).isEmpty(); d5 = z) {
+									if (z < d6 && z >= -d6) {
+										z = 0.0D;
+									} else if (z > 0.0D) {
+										z -= d6;
+									} else {
+										z += d6;
+									}
+								}
+
+								for (; x != 0.0D && z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, z)).isEmpty(); d5 = z) {
+									if (x < d6 && x >= -d6) {
+										x = 0.0D;
+									} else if (x > 0.0D) {
+										x -= d6;
+									} else {
+										x += d6;
+									}
+
+									d3 = x;
+
+									if (z < d6 && z >= -d6) {
+										z = 0.0D;
+									} else if (z > 0.0D) {
+										z -= d6;
+									} else {
+										z += d6;
+									}
+								}
+							}
+
+							List&lt;AxisAlignedBB&gt; list1 = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(x, y, z));
+							AxisAlignedBB axisalignedbb = this.getEntityBoundingBox();
+
+							for (AxisAlignedBB axisalignedbb1 : list1) {
+								y = axisalignedbb1.calculateYOffset(this.getEntityBoundingBox(), y);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+							boolean flag1 = this.onGround || d4 != y && d4 < 0.0D;
+
+							for (AxisAlignedBB axisalignedbb2 : list1) {
+								x = axisalignedbb2.calculateXOffset(this.getEntityBoundingBox(), x);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, 0.0D, 0.0D));
+
+							for (AxisAlignedBB axisalignedbb13 : list1) {
+								z = axisalignedbb13.calculateZOffset(this.getEntityBoundingBox(), z);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, 0.0D, z));
+
+							if (this.stepHeight > 0.0F && flag1 && (d3 != x || d5 != z)) {
+								double d11 = x;
+								double d7 = y;
+								double d8 = z;
+								AxisAlignedBB axisalignedbb3 = this.getEntityBoundingBox();
+								this.setEntityBoundingBox(axisalignedbb);
+								y = (double)this.stepHeight;
+								List&lt;AxisAlignedBB&gt; list = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(d3, y, d5));
+								AxisAlignedBB axisalignedbb4 = this.getEntityBoundingBox();
+								AxisAlignedBB axisalignedbb5 = axisalignedbb4.addCoord(d3, 0.0D, d5);
+								double d9 = y;
+
+								for (AxisAlignedBB axisalignedbb6 : list) {
+									d9 = axisalignedbb6.calculateYOffset(axisalignedbb5, d9);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(0.0D, d9, 0.0D);
+								double d15 = d3;
+
+								for (AxisAlignedBB axisalignedbb7 : list) {
+									d15 = axisalignedbb7.calculateXOffset(axisalignedbb4, d15);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(d15, 0.0D, 0.0D);
+								double d16 = d5;
+
+								for (AxisAlignedBB axisalignedbb8 : list) {
+									d16 = axisalignedbb8.calculateZOffset(axisalignedbb4, d16);
+								}
+
+								axisalignedbb4 = axisalignedbb4.offset(0.0D, 0.0D, d16);
+								AxisAlignedBB axisalignedbb14 = this.getEntityBoundingBox();
+								double d17 = y;
+
+								for (AxisAlignedBB axisalignedbb9 : list) {
+									d17 = axisalignedbb9.calculateYOffset(axisalignedbb14, d17);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(0.0D, d17, 0.0D);
+								double d18 = d3;
+
+								for (AxisAlignedBB axisalignedbb10 : list) {
+									d18 = axisalignedbb10.calculateXOffset(axisalignedbb14, d18);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(d18, 0.0D, 0.0D);
+								double d19 = d5;
+
+								for (AxisAlignedBB axisalignedbb11 : list) {
+									d19 = axisalignedbb11.calculateZOffset(axisalignedbb14, d19);
+								}
+
+								axisalignedbb14 = axisalignedbb14.offset(0.0D, 0.0D, d19);
+								double d20 = d15 * d15 + d16 * d16;
+								double d10 = d18 * d18 + d19 * d19;
+
+								if (d20 > d10) {
+									x = d15;
+									z = d16;
+									y = -d9;
+									this.setEntityBoundingBox(axisalignedbb4);
+								} else {
+									x = d18;
+									z = d19;
+									y = -d17;
+									this.setEntityBoundingBox(axisalignedbb14);
+								}
+
+								for (AxisAlignedBB axisalignedbb12 : list) {
+									y = axisalignedbb12.calculateYOffset(this.getEntityBoundingBox(), y);
+								}
+
+								this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+
+								if (d11 * d11 + d8 * d8 >= x * x + z * z) {
+									x = d11;
+									y = d7;
+									z = d8;
+									this.setEntityBoundingBox(axisalignedbb3);
+								}
+							}
+
+							this.worldObj.theProfiler.endSection();
+							this.worldObj.theProfiler.startSection("rest");
+							this.resetPositionToBB();
+							this.isCollidedHorizontally = d3 != x || d5 != z;
+							this.isCollidedVertically = d4 != y;
+							this.onGround = this.isCollidedVertically && d4 < 0.0D;
+							this.isCollided = this.isCollidedHorizontally || this.isCollidedVertically;
+							int i = MathHelper.floor_double(this.posX);
+							int j = MathHelper.floor_double(this.posY - 0.20000000298023224D);
+							int k = MathHelper.floor_double(this.posZ);
+							BlockPos blockpos = new BlockPos(i, j, k);
+							Block block1 = this.worldObj.getBlockState(blockpos).getBlock();
+
+							if (block1.getMaterial() == Material.air) {
+								Block block = this.worldObj.getBlockState(blockpos.down()).getBlock();
+
+								if (block instanceof BlockFence || block instanceof BlockWall || block instanceof BlockFenceGate) {
+									block1 = block;
+									blockpos = blockpos.down();
+								}
+							}
+
+							this.updateFallState(y, this.onGround, block1, blockpos);
+
+							if (d3 != x) {
+								this.motionX = 0.0D;
+							}
+
+							if (d5 != z) {
+								this.motionZ = 0.0D;
+							}
+
+							if (d4 != y) {
+								block1.onLanded(this.worldObj, this);
+							}
+
+							if (this.canTriggerWalking() && !flag && this.ridingEntity == null) {
+								double d12 = this.posX - d0;
+								double d13 = this.posY - d1;
+								double d14 = this.posZ - d2;
+
+								if (block1 != Blocks.ladder) {
+									d13 = 0.0D;
+								}
+
+								if (block1 != null && this.onGround) {
+									block1.onEntityCollidedWithBlock(this.worldObj, blockpos, this);
+								}
+
+								this.distanceWalkedModified = (float)((double)this.distanceWalkedModified + (double)MathHelper.sqrt_double(d12 * d12 + d14 * d14) * 0.6D);
+								this.distanceWalkedOnStepModified = (float)((double)this.distanceWalkedOnStepModified + (double)MathHelper.sqrt_double(d12 * d12 + d13 * d13 + d14 * d14) * 0.6D);
+
+								if (this.distanceWalkedOnStepModified > (float)this.nextStepDistance && block1.getMaterial() != Material.air) {
+									this.nextStepDistance = (int)this.distanceWalkedOnStepModified + 1;
+
+									if (this.isInWater()) {
+										float f = MathHelper.sqrt_double(this.motionX * this.motionX * 0.20000000298023224D + this.motionY * this.motionY + this.motionZ * this.motionZ * 0.20000000298023224D) * 0.35F;
+
+										if (f > 1.0F) {
+											f = 1.0F;
+										}
+
+										this.playSound(this.getSwimSound(), f, 1.0F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+									}
+
+									this.playStepSound(blockpos, block1);
+								}
+							}
+
+							try {
+								this.doBlockCollisions();
+							} catch (Throwable throwable) {
+								CrashReport crashreport = CrashReport.makeCrashReport(throwable, "Checking entity block collision");
+								CrashReportCategory crashreportcategory = crashreport.makeCategory("Entity being checked for collision");
+								this.addEntityCrashInfo(crashreportcategory);
+								throw new ReportedException(crashreport);
+							}
+
+							boolean flag2 = this.isWet();
+
+							if (this.worldObj.isFlammableWithin(this.getEntityBoundingBox().contract(0.001D, 0.001D, 0.001D))) {
+								this.dealFireDamage(1);
+
+								if (!flag2) {
+									++this.fire;
+
+									if (this.fire == 0) {
+										this.setFire(8);
+									}
+								}
+							} else if (this.fire <= 0) {
+								this.fire = -this.fireResistance;
+							}
+
+							if (flag2 && this.fire > 0) {
+								this.playSound("random.fizz", 0.7F, 1.6F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+								this.fire = -this.fireResistance;
+							}
+
+							this.worldObj.theProfiler.endSection();
+						}
+<span class="comment">						// @from net.minecraft.entity.Entity.java;<br>						// this.moveEntity(this.motionX, this.motionY, this.motionZ);</span></details>
+						this.motionX *= 0.5D;
+						this.motionY *= 0.5D;
+						this.motionZ *= 0.5D;
+						this.motionY -= 0.02D;
+
+						if (this.isCollidedHorizontally && this.isOffsetPositionInLiquid(this.motionX, this.motionY + 0.6000000238418579D - this.posY + d1, this.motionZ)) {
+							this.motionY = 0.30000001192092896D;
+						}
+					}
+				} else {
+					double d0 = this.posY;
+					float f1 = 0.8F;
+					float f2 = 0.02F;
+					float f3 = (float)EnchantmentHelper.getDepthStriderModifier(this);
+
+					if (f3 > 3.0F) {
+						f3 = 3.0F;
+					}
+
+					if (!this.onGround) {
+						f3 *= 0.5F;
+					}
+
+					if (f3 > 0.0F) {
+						f1 += (0.54600006F - f1) * f3 / 3.0F;
+						f2 += (this.getAIMoveSpeed() * 1.0F - f2) * f3 / 3.0F;
+					}
+
+<details open style="--tabs: 5; --offset: 0ch; --bottom: 0.75em;"><summary>					@from net.minecraft.entity.Entity.java; @params float strafe, float forward, float friction<br>					this.moveFlying(strafe, forward, f2);</summary>					float f = strafe * strafe + forward * forward;
+
+					if (f >= 1.0E-4F) {
+						f = MathHelper.sqrt_float(f);
+
+						if (f < 1.0F) {
+							f = 1.0F;
+						}
+
+						f = friction / f;
+						strafe = strafe * f;
+						forward = forward * f;
+						float f1 = MathHelper.sin(this.rotationYaw * (float)Math.PI / 180.0F);
+						float f2 = MathHelper.cos(this.rotationYaw * (float)Math.PI / 180.0F);
+						this.motionX += (double)(strafe * f2 - forward * f1);
+						this.motionZ += (double)(forward * f2 + strafe * f1);
+					}
+<span class="comment">					// @from net.minecraft.entity.Entity.java;<br>					// this.moveFlying(strafe, forward, f2);</span></details><details open style="--tabs: 5; --offset: 0ch; --bottom: 0.75em;"><summary>					@from net.minecraft.entity.Entity.java; @params double x, double y, double z<br>					this.moveEntity(this.motionX, this.motionY, this.motionZ);</summary>					if (this.noClip) {
+						this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, y, z));
+						this.resetPositionToBB();
+					} else {
+						this.worldObj.theProfiler.startSection("move");
+						double d0 = this.posX;
+						double d1 = this.posY;
+						double d2 = this.posZ;
+
+						if (this.isInWeb) {
+							this.isInWeb = false;
+							x *= 0.25D;
+							y *= 0.05000000074505806D;
+							z *= 0.25D;
+							this.motionX = 0.0D;
+							this.motionY = 0.0D;
+							this.motionZ = 0.0D;
+						}
+
+						double d3 = x;
+						double d4 = y;
+						double d5 = z;
+						boolean flag = this.onGround && this.isSneaking() && this instanceof EntityPlayer;
+
+						if (flag) {
+							double d6;
+
+							for (d6 = 0.05D; x != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, 0.0D)).isEmpty(); d3 = x) {
+								if (x < d6 && x >= -d6) {
+									x = 0.0D;
+								} else if (x > 0.0D) {
+									x -= d6;
+								} else {
+									x += d6;
+								}
+							}
+
+							for (; z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(0.0D, -1.0D, z)).isEmpty(); d5 = z) {
+								if (z < d6 && z >= -d6) {
+									z = 0.0D;
+								} else if (z > 0.0D) {
+									z -= d6;
+								} else {
+									z += d6;
+								}
+							}
+
+							for (; x != 0.0D && z != 0.0D && this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().offset(x, -1.0D, z)).isEmpty(); d5 = z) {
+								if (x < d6 && x >= -d6) {
+									x = 0.0D;
+								} else if (x > 0.0D) {
+									x -= d6;
+								} else {
+									x += d6;
+								}
+
+								d3 = x;
+
+								if (z < d6 && z >= -d6) {
+									z = 0.0D;
+								} else if (z > 0.0D) {
+									z -= d6;
+								} else {
+									z += d6;
+								}
+							}
+						}
+
+						List&lt;AxisAlignedBB&gt; list1 = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(x, y, z));
+						AxisAlignedBB axisalignedbb = this.getEntityBoundingBox();
+
+						for (AxisAlignedBB axisalignedbb1 : list1) {
+							y = axisalignedbb1.calculateYOffset(this.getEntityBoundingBox(), y);
+						}
+
+						this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+						boolean flag1 = this.onGround || d4 != y && d4 < 0.0D;
+
+						for (AxisAlignedBB axisalignedbb2 : list1) {
+							x = axisalignedbb2.calculateXOffset(this.getEntityBoundingBox(), x);
+						}
+
+						this.setEntityBoundingBox(this.getEntityBoundingBox().offset(x, 0.0D, 0.0D));
+
+						for (AxisAlignedBB axisalignedbb13 : list1) {
+							z = axisalignedbb13.calculateZOffset(this.getEntityBoundingBox(), z);
+						}
+
+						this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, 0.0D, z));
+
+						if (this.stepHeight > 0.0F && flag1 && (d3 != x || d5 != z)) {
+							double d11 = x;
+							double d7 = y;
+							double d8 = z;
+							AxisAlignedBB axisalignedbb3 = this.getEntityBoundingBox();
+							this.setEntityBoundingBox(axisalignedbb);
+							y = (double)this.stepHeight;
+							List&lt;AxisAlignedBB&gt; list = this.worldObj.getCollidingBoundingBoxes(this, this.getEntityBoundingBox().addCoord(d3, y, d5));
+							AxisAlignedBB axisalignedbb4 = this.getEntityBoundingBox();
+							AxisAlignedBB axisalignedbb5 = axisalignedbb4.addCoord(d3, 0.0D, d5);
+							double d9 = y;
+
+							for (AxisAlignedBB axisalignedbb6 : list) {
+								d9 = axisalignedbb6.calculateYOffset(axisalignedbb5, d9);
+							}
+
+							axisalignedbb4 = axisalignedbb4.offset(0.0D, d9, 0.0D);
+							double d15 = d3;
+
+							for (AxisAlignedBB axisalignedbb7 : list) {
+								d15 = axisalignedbb7.calculateXOffset(axisalignedbb4, d15);
+							}
+
+							axisalignedbb4 = axisalignedbb4.offset(d15, 0.0D, 0.0D);
+							double d16 = d5;
+
+							for (AxisAlignedBB axisalignedbb8 : list) {
+								d16 = axisalignedbb8.calculateZOffset(axisalignedbb4, d16);
+							}
+
+							axisalignedbb4 = axisalignedbb4.offset(0.0D, 0.0D, d16);
+							AxisAlignedBB axisalignedbb14 = this.getEntityBoundingBox();
+							double d17 = y;
+
+							for (AxisAlignedBB axisalignedbb9 : list) {
+								d17 = axisalignedbb9.calculateYOffset(axisalignedbb14, d17);
+							}
+
+							axisalignedbb14 = axisalignedbb14.offset(0.0D, d17, 0.0D);
+							double d18 = d3;
+
+							for (AxisAlignedBB axisalignedbb10 : list) {
+								d18 = axisalignedbb10.calculateXOffset(axisalignedbb14, d18);
+							}
+
+							axisalignedbb14 = axisalignedbb14.offset(d18, 0.0D, 0.0D);
+							double d19 = d5;
+
+							for (AxisAlignedBB axisalignedbb11 : list) {
+								d19 = axisalignedbb11.calculateZOffset(axisalignedbb14, d19);
+							}
+
+							axisalignedbb14 = axisalignedbb14.offset(0.0D, 0.0D, d19);
+							double d20 = d15 * d15 + d16 * d16;
+							double d10 = d18 * d18 + d19 * d19;
+
+							if (d20 > d10) {
+								x = d15;
+								z = d16;
+								y = -d9;
+								this.setEntityBoundingBox(axisalignedbb4);
+							} else {
+								x = d18;
+								z = d19;
+								y = -d17;
+								this.setEntityBoundingBox(axisalignedbb14);
+							}
+
+							for (AxisAlignedBB axisalignedbb12 : list) {
+								y = axisalignedbb12.calculateYOffset(this.getEntityBoundingBox(), y);
+							}
+
+							this.setEntityBoundingBox(this.getEntityBoundingBox().offset(0.0D, y, 0.0D));
+
+							if (d11 * d11 + d8 * d8 >= x * x + z * z) {
+								x = d11;
+								y = d7;
+								z = d8;
+								this.setEntityBoundingBox(axisalignedbb3);
+							}
+						}
+
+						this.worldObj.theProfiler.endSection();
+						this.worldObj.theProfiler.startSection("rest");
+						this.resetPositionToBB();
+						this.isCollidedHorizontally = d3 != x || d5 != z;
+						this.isCollidedVertically = d4 != y;
+						this.onGround = this.isCollidedVertically && d4 < 0.0D;
+						this.isCollided = this.isCollidedHorizontally || this.isCollidedVertically;
+						int i = MathHelper.floor_double(this.posX);
+						int j = MathHelper.floor_double(this.posY - 0.20000000298023224D);
+						int k = MathHelper.floor_double(this.posZ);
+						BlockPos blockpos = new BlockPos(i, j, k);
+						Block block1 = this.worldObj.getBlockState(blockpos).getBlock();
+
+						if (block1.getMaterial() == Material.air) {
+							Block block = this.worldObj.getBlockState(blockpos.down()).getBlock();
+
+							if (block instanceof BlockFence || block instanceof BlockWall || block instanceof BlockFenceGate) {
+								block1 = block;
+								blockpos = blockpos.down();
+							}
+						}
+
+						this.updateFallState(y, this.onGround, block1, blockpos);
+
+						if (d3 != x) {
+							this.motionX = 0.0D;
+						}
+
+						if (d5 != z) {
+							this.motionZ = 0.0D;
+						}
+
+						if (d4 != y) {
+							block1.onLanded(this.worldObj, this);
+						}
+
+						if (this.canTriggerWalking() && !flag && this.ridingEntity == null) {
+							double d12 = this.posX - d0;
+							double d13 = this.posY - d1;
+							double d14 = this.posZ - d2;
+
+							if (block1 != Blocks.ladder) {
+								d13 = 0.0D;
+							}
+
+							if (block1 != null && this.onGround) {
+								block1.onEntityCollidedWithBlock(this.worldObj, blockpos, this);
+							}
+
+							this.distanceWalkedModified = (float)((double)this.distanceWalkedModified + (double)MathHelper.sqrt_double(d12 * d12 + d14 * d14) * 0.6D);
+							this.distanceWalkedOnStepModified = (float)((double)this.distanceWalkedOnStepModified + (double)MathHelper.sqrt_double(d12 * d12 + d13 * d13 + d14 * d14) * 0.6D);
+
+							if (this.distanceWalkedOnStepModified > (float)this.nextStepDistance && block1.getMaterial() != Material.air) {
+								this.nextStepDistance = (int)this.distanceWalkedOnStepModified + 1;
+
+								if (this.isInWater()) {
+									float f = MathHelper.sqrt_double(this.motionX * this.motionX * 0.20000000298023224D + this.motionY * this.motionY + this.motionZ * this.motionZ * 0.20000000298023224D) * 0.35F;
+
+									if (f > 1.0F) {
+										f = 1.0F;
+									}
+
+									this.playSound(this.getSwimSound(), f, 1.0F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+								}
+
+								this.playStepSound(blockpos, block1);
+							}
+						}
+
+						try {
+							this.doBlockCollisions();
+						} catch (Throwable throwable) {
+							CrashReport crashreport = CrashReport.makeCrashReport(throwable, "Checking entity block collision");
+							CrashReportCategory crashreportcategory = crashreport.makeCategory("Entity being checked for collision");
+							this.addEntityCrashInfo(crashreportcategory);
+							throw new ReportedException(crashreport);
+						}
+
+						boolean flag2 = this.isWet();
+
+						if (this.worldObj.isFlammableWithin(this.getEntityBoundingBox().contract(0.001D, 0.001D, 0.001D))) {
+							this.dealFireDamage(1);
+
+							if (!flag2) {
+								++this.fire;
+
+								if (this.fire == 0) {
+									this.setFire(8);
+								}
+							}
+						} else if (this.fire <= 0) {
+							this.fire = -this.fireResistance;
+						}
+
+						if (flag2 && this.fire > 0) {
+							this.playSound("random.fizz", 0.7F, 1.6F + (this.rand.nextFloat() - this.rand.nextFloat()) * 0.4F);
+							this.fire = -this.fireResistance;
+						}
+
+						this.worldObj.theProfiler.endSection();
+					}
+<span class="comment">					// @from net.minecraft.entity.Entity.java;<br>					// this.moveEntity(this.motionX, this.motionY, this.motionZ);</span></details>                	this.motionX *= (double)f1;
+					this.motionY *= 0.800000011920929D;
+					this.motionZ *= (double)f1;
+					this.motionY -= 0.02D;
+
+					if (this.isCollidedHorizontally && this.isOffsetPositionInLiquid(this.motionX, this.motionY + 0.6000000238418579D - this.posY + d0, this.motionZ)) {
+						this.motionY = 0.30000001192092896D;
+					}
+				}
+			}
+
+			this.prevLimbSwingAmount = this.limbSwingAmount;
+			double d2 = this.posX - this.prevPosX;
+			double d3 = this.posZ - this.prevPosZ;
+			float f7 = MathHelper.sqrt_double(d2 * d2 + d3 * d3) * 4.0F;
+
+			if (f7 > 1.0F) {
+				f7 = 1.0F;
+			}
+
+			this.limbSwingAmount += (f7 - this.limbSwingAmount) * 0.4F;
+			this.limbSwing += this.limbSwingAmount;
+<span class="comment">			// @from net.minecraft.entity.EntityLivingBase.java;<br>			// super.moveEntityWithHeading(strafe, forward);</span></details>
+        }
+
+        this.addMovementStat(this.posX - d0, this.posY - d1, this.posZ - d2);
+<span class="comment">		// @from net.minecraft.entity.player.EntityPlayer.java;<br>		// this.moveEntityWithHeading(this.moveStrafing, this.moveForward);</span></details>        this.worldObj.theProfiler.endSection();
+        this.worldObj.theProfiler.startSection("push");
+
+        if (!this.worldObj.isRemote) {
+            this.collideWithNearbyEntities();
+        }
+
+        this.worldObj.theProfiler.endSection();
+<span class="comment">		// @from net.minecraft.entity.EntityLivingBase.java;<br>		// super.onLivingUpdate();</span></details>
+        IAttributeInstance iattributeinstance = this.getEntityAttribute(SharedMonsterAttributes.movementSpeed);
+
+        if (!this.worldObj.isRemote) {
+            iattributeinstance.setBaseValue((double)this.capabilities.getWalkSpeed());
+        }
+
+        this.jumpMovementFactor = this.speedInAir;
+
+        if (this.isSprinting()) {
+            this.jumpMovementFactor = (float)((double)this.jumpMovementFactor + (double)this.speedInAir * 0.3D);
+        }
+
+        this.setAIMoveSpeed((float)iattributeinstance.getAttributeValue());
+        float f = MathHelper.sqrt_double(this.motionX * this.motionX + this.motionZ * this.motionZ);
+        float f1 = (float)(Math.atan(-this.motionY * 0.20000000298023224D) * 15.0D);
+
+        if (f > 0.1F) {
+            f = 0.1F;
+        }
+
+        if (!this.onGround || this.getHealth() <= 0.0F) {
+            f = 0.0F;
+        }
+
+        if (this.onGround || this.getHealth() <= 0.0F) {
+            f1 = 0.0F;
+        }
+
+        this.cameraYaw += (f - this.cameraYaw) * 0.4F;
+        this.cameraPitch += (f1 - this.cameraPitch) * 0.8F;
+
+        if (this.getHealth() > 0.0F && !this.isSpectator()) {
+            AxisAlignedBB axisalignedbb = null;
+
+            if (this.ridingEntity != null && !this.ridingEntity.isDead) {
+                axisalignedbb = this.getEntityBoundingBox().union(this.ridingEntity.getEntityBoundingBox()).expand(1.0D, 0.0D, 1.0D);
+            } else {
+                axisalignedbb = this.getEntityBoundingBox().expand(1.0D, 0.5D, 1.0D);
+            }
+
+            List&lt;Entity&gt; list = this.worldObj.getEntitiesWithinAABBExcludingEntity(this, axisalignedbb);
+
+            for (int i = 0; i < list.size(); ++i) {
+                Entity entity = (Entity)list.get(i);
+
+                if (!entity.isDead) {
+                    this.collideWithPlayer(entity);
+                }
+            }
+        }
+<span class="comment">		// @from net.minecraft.entity.player.EntityPlayer.java;<br>		// super.onLivingUpdate();</span></details>
+        if (this.onGround && this.capabilities.isFlying && !this.mc.playerController.isSpectatorMode()) {
+            this.capabilities.isFlying = false;
+            this.sendPlayerAbilities();
+        }
+<span class="comment">		// @from net.minecraft.client.entity.EntityPlayerSP.java;<br>		// this.onLivingUpdate();</span></details>
+		double d0 = this.posX - this.prevPosX;
+		double d1 = this.posZ - this.prevPosZ;
+		float f = (float)(d0 * d0 + d1 * d1);
+		float f1 = this.renderYawOffset;
+		float f2 = 0.0F;
+		this.prevOnGroundSpeedFactor = this.onGroundSpeedFactor;
+		float f3 = 0.0F;
+
+		if (f > 0.0025000002F) {
+			f3 = 1.0F;
+			f2 = (float)Math.sqrt((double)f) * 3.0F;
+			f1 = (float)MathHelper.atan2(d1, d0) * 180.0F / (float)Math.PI - 90.0F;
+		}
+
+		if (this.swingProgress > 0.0F) {
+			f1 = this.rotationYaw;
+		}
+
+		if (!this.onGround) {
+			f3 = 0.0F;
+		}
+
+		this.onGroundSpeedFactor += (f3 - this.onGroundSpeedFactor) * 0.3F;
+		this.worldObj.theProfiler.startSection("headTurn");
+		f2 = this.updateDistance(f1, f2);
+		this.worldObj.theProfiler.endSection();
+		this.worldObj.theProfiler.startSection("rangeChecks");
+
+		while (this.rotationYaw - this.prevRotationYaw < -180.0F) {
+			this.prevRotationYaw -= 360.0F;
+		}
+
+		while (this.rotationYaw - this.prevRotationYaw >= 180.0F) {
+			this.prevRotationYaw += 360.0F;
+		}
+
+		while (this.renderYawOffset - this.prevRenderYawOffset < -180.0F) {
+			this.prevRenderYawOffset -= 360.0F;
+		}
+
+		while (this.renderYawOffset - this.prevRenderYawOffset >= 180.0F) {
+			this.prevRenderYawOffset += 360.0F;
+		}
+
+		while (this.rotationPitch - this.prevRotationPitch < -180.0F) {
+			this.prevRotationPitch -= 360.0F;
+		}
+
+		while (this.rotationPitch - this.prevRotationPitch >= 180.0F) {
+			this.prevRotationPitch += 360.0F;
+		}
+
+		while (this.rotationYawHead - this.prevRotationYawHead < -180.0F) {
+			this.prevRotationYawHead -= 360.0F;
+		}
+
+		while (this.rotationYawHead - this.prevRotationYawHead >= 180.0F) {
+			this.prevRotationYawHead += 360.0F;
+		}
+
+		this.worldObj.theProfiler.endSection();
+		this.movedDistance += f2;
+<span class="comment">		// @from net.minecraft.entity.EntityLivingBase.java;<br>		// super.onUpdate();</span></details>
+		if (!this.worldObj.isRemote && this.openContainer != null && !this.openContainer.canInteractWith(this)) {
+			this.closeScreen();
+			this.openContainer = this.inventoryContainer;
+		}
+
+		if (this.isBurning() && this.capabilities.disableDamage) {
+			this.extinguish();
+		}
+
+		this.prevChasingPosX = this.chasingPosX;
+		this.prevChasingPosY = this.chasingPosY;
+		this.prevChasingPosZ = this.chasingPosZ;
+		double d5 = this.posX - this.chasingPosX;
+		double d0 = this.posY - this.chasingPosY;
+		double d1 = this.posZ - this.chasingPosZ;
+		double d2 = 10.0D;
+
+		if (d5 > d2) {
+			this.prevChasingPosX = this.chasingPosX = this.posX;
+		}
+
+		if (d1 > d2) {
+			this.prevChasingPosZ = this.chasingPosZ = this.posZ;
+		}
+
+		if (d0 > d2) {
+			this.prevChasingPosY = this.chasingPosY = this.posY;
+		}
+
+		if (d5 < -d2) {
+			this.prevChasingPosX = this.chasingPosX = this.posX;
+		}
+
+		if (d1 < -d2) {
+			this.prevChasingPosZ = this.chasingPosZ = this.posZ;
+		}
+
+		if (d0 < -d2) {
+			this.prevChasingPosY = this.chasingPosY = this.posY;
+		}
+
+		this.chasingPosX += d5 * 0.25D;
+		this.chasingPosZ += d1 * 0.25D;
+		this.chasingPosY += d0 * 0.25D;
+
+		if (this.ridingEntity == null) {
+			this.startMinecartRidingCoordinate = null;
+		}
+
+		if (!this.worldObj.isRemote) {
+			this.foodStats.onUpdate(this);
+			this.triggerAchievement(StatList.minutesPlayedStat);
+
+			if (this.isEntityAlive()) {
+				this.triggerAchievement(StatList.timeSinceDeathStat);
+			}
+		}
+
+		int i = 29999999;
+		double d3 = MathHelper.clamp_double(this.posX, -2.9999999E7D, 2.9999999E7D);
+		double d4 = MathHelper.clamp_double(this.posZ, -2.9999999E7D, 2.9999999E7D);
+
+		if (d3 != this.posX || d4 != this.posZ) {
+			this.setPosition(d3, this.posY, d4);
+		}
+
+<span class="comment">		// @from net.minecraft.entity.player.EntityPlayer.java;<br>		// super.onUpdate();</span></details>
+		if (this.isRiding()) {
+			this.sendQueue.addToSendQueue(new C03PacketPlayer.C05PacketPlayerLook(this.rotationYaw, this.rotationPitch, this.onGround));
+			this.sendQueue.addToSendQueue(new C0CPacketInput(this.moveStrafing, this.moveForward, this.movementInput.jump, this.movementInput.sneak));
+		} else {
+<details open style="--tabs: 3; --bottom: 0.75em;"><summary>			@from net.minecraft.client.entity.EntityPlayerSP.java;<br>			this.onUpdateWalkingPlayer();</summary>			boolean flag = this.isSprinting();
+
+			if (flag != this.serverSprintState) {
+				if (flag) {
+					this.sendQueue.addToSendQueue(new C0BPacketEntityAction(this, C0BPacketEntityAction.Action.START_SPRINTING));
+				} else {
+					this.sendQueue.addToSendQueue(new C0BPacketEntityAction(this, C0BPacketEntityAction.Action.STOP_SPRINTING));
+				}
+
+				this.serverSprintState = flag;
+			}
+
+			boolean flag1 = this.isSneaking();
+
+			if (flag1 != this.serverSneakState) {
+				if (flag1) {
+					this.sendQueue.addToSendQueue(new C0BPacketEntityAction(this, C0BPacketEntityAction.Action.START_SNEAKING));
+				} else {
+					this.sendQueue.addToSendQueue(new C0BPacketEntityAction(this, C0BPacketEntityAction.Action.STOP_SNEAKING));
+				}
+
+				this.serverSneakState = flag1;
+			}
+
+			if (this.isCurrentViewEntity()) {
+				double d0 = this.posX - this.lastReportedPosX;
+				double d1 = this.getEntityBoundingBox().minY - this.lastReportedPosY;
+				double d2 = this.posZ - this.lastReportedPosZ;
+				double d3 = (double)(this.rotationYaw - this.lastReportedYaw);
+				double d4 = (double)(this.rotationPitch - this.lastReportedPitch);
+				boolean flag2 = d0 * d0 + d1 * d1 + d2 * d2 > 9.0E-4D || this.positionUpdateTicks >= 20;
+				boolean flag3 = d3 != 0.0D || d4 != 0.0D;
+
+				if (this.ridingEntity == null) {
+					if (flag2 && flag3) {
+						this.sendQueue.addToSendQueue(new C03PacketPlayer.C06PacketPlayerPosLook(this.posX, this.getEntityBoundingBox().minY, this.posZ, this.rotationYaw, this.rotationPitch, this.onGround));
+					} else if (flag2) {
+						this.sendQueue.addToSendQueue(new C03PacketPlayer.C04PacketPlayerPosition(this.posX, this.getEntityBoundingBox().minY, this.posZ, this.onGround));
+					} else if (flag3) {
+						this.sendQueue.addToSendQueue(new C03PacketPlayer.C05PacketPlayerLook(this.rotationYaw, this.rotationPitch, this.onGround));
+					} else {
+						this.sendQueue.addToSendQueue(new C03PacketPlayer(this.onGround));
+					}
+				} else {
+					this.sendQueue.addToSendQueue(new C03PacketPlayer.C06PacketPlayerPosLook(this.motionX, -999.0D, this.motionZ, this.rotationYaw, this.rotationPitch, this.onGround));
+					flag2 = false;
+				}
+
+				++this.positionUpdateTicks;
+
+				if (flag2) {
+					this.lastReportedPosX = this.posX;
+					this.lastReportedPosY = this.getEntityBoundingBox().minY;
+					this.lastReportedPosZ = this.posZ;
+					this.positionUpdateTicks = 0;
+				}
+
+				if (flag3) {
+					this.lastReportedYaw = this.rotationYaw;
+					this.lastReportedPitch = this.rotationPitch;
+				}
+			}
+<span class="comment">			// @from net.minecraft.client.entity.EntityPlayerSP.java;<br>			// this.onUpdateWalkingPlayer();</span></details>		}
+	}
+}
+<span class="comment">// @from net.minecraft.client.entity.EntityPlayerSP.java;<br>// this.onUpdate();</span></details></div>
+</body>
+</html>
